@@ -1972,6 +1972,22 @@
     var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkZm1hY2Z3end6anpjZmp3aWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyMDIxNTgsImV4cCI6MjA4MTc3ODE1OH0.DgGAsSqEx-gFz68fApijRuvGgr0wGdDJorm-4L0QNdA';
 
     // ====== REAL-TIME CONNECTION ======
+    function rowToEvent(row) {
+      return {
+        id: row.id || (EVENTS.length + 1),
+        lat: parseFloat(row.lat),
+        lon: parseFloat(row.lon),
+        name: row.name,
+        desc: row.description || '',
+        category: row.category,
+        date: row.event_date,
+        color: parseInt((row.color || '').replace('#', ''), 16) || 0x06b6d4,
+        hex: row.color || '#06b6d4',
+        dates: row.event_date,
+        _ts: new Date(row.event_date).getTime() || Date.now()
+      };
+    }
+
     function connectRealtime() {
       if (!window.supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
         store.connectionStatus = 'offline';
@@ -1980,26 +1996,27 @@
       var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
       store.connectionStatus = 'connecting';
 
+      // Load existing GDELT events from database on startup
+      sb.from('osint_events').select('*').order('created_at', { ascending: false }).limit(500)
+        .then(function(res) {
+          if (res.data && res.data.length > 0) {
+            for (var i = 0; i < res.data.length; i++) {
+              EVENTS.push(rowToEvent(res.data[i]));
+            }
+            buildMarkers();
+            updateCounts();
+            renderStrikeList();
+            console.log('Loaded ' + res.data.length + ' events from Supabase');
+          }
+        });
+
       sb.channel('osint-events')
         .on('postgres_changes', {
           event: 'INSERT',
           schema: 'public',
           table: 'osint_events'
         }, function(payload) {
-          var row = payload.new;
-          var evt = {
-            id: row.id || (EVENTS.length + 1),
-            lat: parseFloat(row.lat),
-            lon: parseFloat(row.lon),
-            name: row.name,
-            desc: row.description || '',
-            category: row.category,
-            date: row.event_date,
-            color: parseInt((row.color || '').replace('#', ''), 16) || 0x06b6d4,
-            hex: row.color || '#06b6d4',
-            dates: row.event_date,
-            _ts: new Date(row.event_date).getTime() || Date.now()
-          };
+          var evt = rowToEvent(payload.new);
           EVENTS.push(evt);
           store.lastUpdated = new Date();
           buildMarkers();

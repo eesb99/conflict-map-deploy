@@ -160,10 +160,13 @@ serve(async (req: Request) => {
 
     // 4. Filter for Middle East military strike events only
     const STRIKE_CAMEO_ROOTS = new Set(["18", "19", "20"]); // assault, fight, mass violence
-    const meConflictRows = rows.filter((cols) => {
+    const MIN_MENTIONS = 3; // filter out low-signal single-source events
+    const allMeConflict = rows.filter((cols) => {
       const geoCountry = cols[COL.ACTION_GEO_COUNTRY] || "";
       const quadClass = parseInt(cols[COL.QUAD_CLASS]) || 0;
       const rootCode = cols[COL.EVENT_ROOT_CODE] || "";
+      const mentions = parseInt(cols[COL.NUM_MENTIONS]) || 0;
+      const actor1 = (cols[COL.ACTOR1_NAME] || "").trim();
       const lat = parseFloat(cols[COL.ACTION_GEO_LAT]);
       const lon = parseFloat(cols[COL.ACTION_GEO_LONG]);
 
@@ -171,11 +174,29 @@ serve(async (req: Request) => {
         ME_COUNTRIES.has(geoCountry) &&
         quadClass === 4 &&                   // Material Conflict only
         STRIKE_CAMEO_ROOTS.has(rootCode) &&  // Military action codes
+        mentions >= MIN_MENTIONS &&          // Multi-source corroboration
+        actor1.length > 0 &&                 // Require known actor
         !isNaN(lat) && !isNaN(lon)
       );
     });
 
-    console.log(`Filtered to ${meConflictRows.length} ME conflict events`);
+    console.log(`Pre-dedup ME conflict events: ${allMeConflict.length}`);
+
+    // 4b. Deduplicate by actor pair + geo location (keep highest-mention version)
+    const dedupMap = new Map<string, string[]>();
+    for (const cols of allMeConflict) {
+      const actor1 = (cols[COL.ACTOR1_NAME] || "").toLowerCase().trim();
+      const actor2 = (cols[COL.ACTOR2_NAME] || "").toLowerCase().trim();
+      const geo = (cols[COL.ACTION_GEO_FULLNAME] || "").toLowerCase().trim();
+      const key = `${actor1}|${actor2}|${geo}`;
+      const existing = dedupMap.get(key);
+      if (!existing || (parseInt(cols[COL.NUM_MENTIONS]) || 0) > (parseInt(existing[COL.NUM_MENTIONS]) || 0)) {
+        dedupMap.set(key, cols);
+      }
+    }
+    const meConflictRows = Array.from(dedupMap.values());
+
+    console.log(`Filtered to ${meConflictRows.length} ME conflict events (after dedup)`);
 
     if (meConflictRows.length === 0) {
       return new Response(
