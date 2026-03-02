@@ -7,6 +7,8 @@
 | Phase 1: Static Dashboard | Complete | 2026-03-02 | 100% |
 | Phase 2: Supabase Realtime | Complete | 2026-03-03 | 100% |
 | Phase 3: Mac Mini Polling | Complete | 2026-03-03 | 100% |
+| Phase 4: GDELT Bug Fix + Filters | Complete | 2026-03-03 | 100% |
+| Phase 5: Startup Fetch | Complete | 2026-03-03 | 100% |
 
 ## Phase 1: Static Dashboard (2026-03-02) - COMPLETE
 
@@ -51,10 +53,40 @@
 - launchctl start: confirmed working
 - Agent loaded and scheduled
 
+## Phase 4: GDELT Bug Fix + Filters (2026-03-03) - COMPLETE
+
+**Commits:** `41ed719` - fix: correct GDELT column indices
+**Duration:** ~15 min
+
+### Bug
+- GDELT column 28 = EventRootCode, not QuadClass
+- Filter checked root code === 4 ("Make Statement") instead of quad class === 4 (Material Conflict)
+- Result: zero events ever passed through
+
+### Fix
+- Corrected: QuadClass=29, Goldstein=30, NumMentions=31, AvgTone=34
+- Added EVENT_ROOT_CODE=28 for direct access
+
+### Filter Tightening
+- Added NumMentions >= 3 (multi-source corroboration)
+- Added known Actor1 required (no "Unknown" actors)
+- Added actor pair + location dedup (keeps highest-mention version)
+- Result: 116 events/cycle -> 21 events/cycle (~80% noise reduction)
+
+## Phase 5: Startup Fetch (2026-03-03) - COMPLETE
+
+**Commits:** `04ee42e` - feat: load existing GDELT events on page startup
+**Duration:** ~10 min
+
+- Frontend fetches up to 500 existing events from Supabase on page load
+- Extracted shared `rowToEvent()` function for Realtime + startup fetch
+- Existing GDELT events now visible immediately, not just live inserts
+
 ## Metrics
 
-- Total commits: 2
-- Total files: 17 tracked
+- Total commits: 5
+- Total files: 19 tracked
 - Edge functions: 1 (poll-gdelt)
 - External services: Supabase, GDELT, Vercel
 - Infrastructure: Mac Mini (launchd cron)
+- DB events: 137 (116 noisy + 21 clean -- pending cleanup)
