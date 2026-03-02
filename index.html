@@ -1,0 +1,2001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OSINT Intelligence Dashboard | Middle East Conflict | Feb 28 – Mar 2, 2026</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+  <style>
+    /* ====== OSINT DASHBOARD LAYOUT ====== */
+    .main-content {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      overflow: hidden;
+      position: relative;
+    }
+    .globe-container {
+      position: relative;
+      overflow: hidden;
+      min-height: 0;
+    }
+    #globe-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .osint-sidebar {
+      background: rgba(8, 22, 26, 0.96);
+      border-left: 1px solid var(--border);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      display: flex;
+      flex-direction: column;
+    }
+    .osint-sidebar::-webkit-scrollbar { width: 4px; }
+    .osint-sidebar::-webkit-scrollbar-track { background: transparent; }
+    .osint-sidebar::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+
+    /* ====== OSINT PANEL ====== */
+    .osint-panel {
+      border-bottom: 1px solid var(--border);
+    }
+    .osint-panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      cursor: pointer;
+      user-select: none;
+      transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      background: rgba(8, 22, 26, 0.98);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .osint-panel-header:hover {
+      background: rgba(14, 32, 38, 0.98);
+    }
+    .osint-panel-header:active {
+      background: rgba(18, 38, 44, 0.98);
+    }
+    .osint-panel-title-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .osint-panel-icon {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .osint-panel-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+    }
+    .osint-panel-status {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      padding: 2px 6px;
+      border-radius: 3px;
+    }
+    .osint-panel-chevron {
+      font-size: 10px;
+      color: var(--color-text-dim);
+      transition: transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+      margin-left: 8px;
+    }
+    .osint-panel.collapsed .osint-panel-chevron {
+      transform: rotate(-90deg);
+    }
+    .osint-panel-body {
+      padding: 0 14px 14px;
+      overflow: hidden;
+      transition: max-height 400ms cubic-bezier(0.16, 1, 0.3, 1), opacity 300ms ease, padding 300ms ease;
+      max-height: 2000px;
+      opacity: 1;
+    }
+    .osint-panel.collapsed .osint-panel-body {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+
+    /* Status badges */
+    .status-closed {
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+    }
+    .status-restricted {
+      background: rgba(234, 179, 8, 0.15);
+      color: #eab308;
+    }
+    .status-partial {
+      background: rgba(249, 115, 22, 0.15);
+      color: #f97316;
+    }
+    .status-open {
+      background: rgba(34, 197, 94, 0.15);
+      color: #22c55e;
+    }
+    .status-critical {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      animation: pulse-badge 2s ease-in-out infinite;
+    }
+    .status-blackout {
+      background: rgba(168, 85, 247, 0.2);
+      color: #a855f7;
+      animation: pulse-badge 2s ease-in-out infinite;
+    }
+    @keyframes pulse-badge {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    /* Airport table */
+    .airport-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1px;
+      margin-bottom: 10px;
+    }
+    .airport-row {
+      display: grid;
+      grid-template-columns: 10px 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 4px 6px;
+      border-radius: 3px;
+      background: rgba(120, 160, 155, 0.03);
+      font-size: 11px;
+    }
+    .airport-row:hover {
+      background: rgba(120, 160, 155, 0.06);
+    }
+    .airport-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .airport-dot.closed { background: #ef4444; box-shadow: 0 0 6px rgba(239,68,68,0.5); }
+    .airport-dot.restricted { background: #eab308; box-shadow: 0 0 6px rgba(234,179,8,0.4); }
+    .airport-dot.partial { background: #f97316; box-shadow: 0 0 6px rgba(249,115,22,0.4); }
+    .airport-name {
+      color: var(--color-text);
+      font-size: 11px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .airport-status {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .airport-detail {
+      font-size: 10px;
+      color: var(--color-text-dim);
+      padding: 0 6px 3px 24px;
+      line-height: 1.4;
+    }
+
+    /* Stats row */
+    .osint-stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .osint-stat-card {
+      padding: 8px 10px;
+      background: rgba(14, 32, 36, 0.5);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+    }
+    .osint-stat-value {
+      font-family: var(--font-mono);
+      font-size: 16px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums lining-nums;
+      line-height: 1.2;
+    }
+    .osint-stat-label {
+      font-size: 9px;
+      font-family: var(--font-mono);
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--color-text-dim);
+      margin-top: 2px;
+    }
+
+    /* Hormuz mini map */
+    .hormuz-map {
+      position: relative;
+      height: 120px;
+      background: rgba(6, 18, 22, 0.8);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .hormuz-map canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    /* Oil chart */
+    .oil-chart-container {
+      position: relative;
+      height: 160px;
+      background: rgba(6, 18, 22, 0.6);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+      margin-bottom: 10px;
+    }
+    .oil-chart-container canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .oil-price-current {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .oil-price-value {
+      font-family: var(--font-mono);
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--color-white);
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+    .oil-price-delta {
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .oil-price-label {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-dim);
+      letter-spacing: 0.06em;
+    }
+
+    /* Internet gauge */
+    .connectivity-gauge {
+      position: relative;
+      width: 120px;
+      height: 120px;
+      margin: 0 auto 10px;
+    }
+    .connectivity-gauge canvas {
+      width: 100%;
+      height: 100%;
+    }
+    .connectivity-center {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+    .connectivity-pct {
+      font-family: var(--font-mono);
+      font-size: 28px;
+      font-weight: 700;
+      color: #ef4444;
+      font-variant-numeric: tabular-nums lining-nums;
+      line-height: 1;
+    }
+    .connectivity-label {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--color-text-dim);
+      margin-top: 2px;
+    }
+
+    /* Timeline steps */
+    .connectivity-timeline {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      margin: 10px 0;
+      position: relative;
+      padding-left: 16px;
+    }
+    .connectivity-timeline::before {
+      content: '';
+      position: absolute;
+      left: 5px;
+      top: 6px;
+      bottom: 6px;
+      width: 1px;
+      background: var(--border-active);
+    }
+    .ct-step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 4px 0;
+      position: relative;
+    }
+    .ct-step::before {
+      content: '';
+      position: absolute;
+      left: -13px;
+      top: 9px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--color-text-dim);
+    }
+    .ct-step.active::before {
+      background: #ef4444;
+      box-shadow: 0 0 6px rgba(239,68,68,0.6);
+    }
+    .ct-date {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--color-text-dim);
+      min-width: 44px;
+      flex-shrink: 0;
+    }
+    .ct-desc {
+      font-size: 10px;
+      color: var(--color-text-muted);
+      line-height: 1.4;
+    }
+
+    /* Networks list */
+    .network-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+    }
+    .network-tag {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 3px;
+      background: rgba(239, 68, 68, 0.1);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+
+    /* Source text */
+    .osint-source {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      color: var(--color-text-dim);
+      margin-top: 6px;
+      opacity: 0.7;
+      letter-spacing: 0.04em;
+    }
+
+    /* Globe overlay labels */
+    .globe-label {
+      position: absolute;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .source-attribution {
+      position: absolute;
+      bottom: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-family: var(--font-mono);
+      font-size: 9px;
+      color: var(--color-text-dim);
+      letter-spacing: 0.05em;
+      white-space: nowrap;
+      z-index: 10;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
+    /* Carrier tags */
+    .carrier-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 3px;
+      margin-top: 6px;
+    }
+    .carrier-tag {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      padding: 1px 5px;
+      border-radius: 2px;
+      background: rgba(120,160,155,0.06);
+      color: var(--color-text-dim);
+      border: 1px solid var(--border);
+    }
+
+    /* Shipping info rows */
+    .shipping-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 3px 0;
+      border-bottom: 1px solid rgba(120,160,155,0.06);
+    }
+    .shipping-row:last-child { border-bottom: none; }
+    .shipping-label {
+      font-size: 10px;
+      color: var(--color-text-muted);
+    }
+    .shipping-value {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      font-variant-numeric: tabular-nums lining-nums;
+    }
+
+    /* Loading overlay */
+    .loading-overlay {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #0a1a1e;
+      z-index: 200;
+      transition: opacity 500ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .loading-overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+      visibility: hidden;
+    }
+    .loading-spinner {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--border);
+      border-top-color: var(--color-red);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--color-text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    /* Mobile tabs */
+    .mobile-tabs {
+      display: none;
+    }
+    .mobile-tab {
+      flex: 1;
+      padding: 8px;
+      background: rgba(120,160,155,0.05);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      cursor: pointer;
+      text-align: center;
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .mobile-tab.active {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: var(--color-red);
+      color: var(--color-white);
+    }
+
+    /* ====== STRIKE LIST HAMBURGER + PANEL ====== */
+    .strike-menu-btn {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 30;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(8, 22, 26, 0.85);
+      border: 1px solid var(--border-active);
+      border-radius: 6px;
+      color: var(--color-text-muted);
+      cursor: pointer;
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    .strike-menu-btn:hover {
+      background: rgba(14, 32, 38, 0.95);
+      color: var(--color-white);
+      border-color: rgba(120, 160, 155, 0.4);
+    }
+
+    .strike-list-panel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 340px;
+      max-width: 90%;
+      height: 100%;
+      z-index: 40;
+      background: rgba(8, 22, 26, 0.96);
+      border-right: 1px solid var(--border-active);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      display: flex;
+      flex-direction: column;
+      transform: translateX(-100%);
+      opacity: 0;
+      pointer-events: none;
+      transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1), opacity 250ms ease;
+    }
+    .strike-list-panel.open {
+      transform: translateX(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .strike-list-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .strike-list-title {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      color: var(--color-text-muted);
+    }
+    .strike-list-count {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--color-white);
+      background: rgba(239, 68, 68, 0.15);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .strike-list-close {
+      background: none;
+      border: none;
+      color: var(--color-text-dim);
+      font-size: 20px;
+      cursor: pointer;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+      line-height: 1;
+    }
+    .strike-list-close:hover {
+      color: var(--color-white);
+      background: rgba(120, 160, 155, 0.1);
+    }
+
+    .strike-list-filters {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .strike-filter {
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 500;
+      letter-spacing: 0.06em;
+      padding: 3px 8px;
+      border-radius: 3px;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--color-text-dim);
+      cursor: pointer;
+      transition: all 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .strike-filter:hover {
+      border-color: var(--border-active);
+      color: var(--color-text-muted);
+    }
+    .strike-filter.active {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: var(--color-red);
+      color: var(--color-white);
+    }
+    .strike-filter[data-cat]:not([data-cat="all"]).active {
+      background: color-mix(in srgb, var(--fc) 12%, transparent);
+      border-color: var(--fc);
+      color: var(--fc);
+    }
+
+    .strike-list-body {
+      flex: 1;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 6px 0;
+    }
+    .strike-list-body::-webkit-scrollbar { width: 3px; }
+    .strike-list-body::-webkit-scrollbar-track { background: transparent; }
+    .strike-list-body::-webkit-scrollbar-thumb { background: var(--border-active); border-radius: 2px; }
+
+    .strike-item {
+      display: grid;
+      grid-template-columns: 8px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 7px 14px;
+      cursor: pointer;
+      transition: background 180ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .strike-item:hover {
+      background: rgba(120, 160, 155, 0.06);
+    }
+    .strike-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .strike-name {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--color-text);
+      line-height: 1.3;
+    }
+    .strike-desc {
+      font-size: 10px;
+      color: var(--color-text-dim);
+      line-height: 1.4;
+      margin-top: 1px;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    .strike-date-tag {
+      font-family: var(--font-mono);
+      font-size: 8px;
+      font-weight: 500;
+      color: var(--color-text-dim);
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      margin-top: 4px;
+    }
+
+    /* ====== RESPONSIVE ====== */
+    @media (max-width: 1024px) {
+      .main-content {
+        grid-template-columns: 1fr;
+        grid-template-rows: 1fr;
+      }
+      .globe-container.mobile-hidden { display: none; }
+      .osint-sidebar.mobile-hidden { display: none; }
+      .mobile-tabs {
+        display: flex;
+        gap: 4px;
+        padding: 6px 12px;
+        background: rgba(8, 22, 26, 0.96);
+        border-bottom: 1px solid var(--border);
+      }
+      .osint-sidebar {
+        border-left: none;
+      }
+    }
+    @media (max-width: 768px) {
+      .stats-bar { gap: 12px; flex-wrap: wrap; padding: 6px 12px; }
+      .stat-value { font-size: 13px; }
+      .header-title { font-size: 9px; }
+      .timeline-bar { padding: 6px 12px; gap: 6px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- HEADER -->
+    <header class="header">
+      <div class="header-left">
+        <div class="live-indicator"><div class="live-dot"></div><span>LIVE</span></div>
+        <div class="header-title"><span>OSINT INTELLIGENCE DASHBOARD</span> &nbsp;|&nbsp; MIDDLE EAST COP &nbsp;|&nbsp; FEB 28 – MAR 2, 2026</div>
+      </div>
+      <div class="header-right"><div class="header-time" id="headerTime">--:--:-- UTC</div></div>
+    </header>
+
+    <!-- MOBILE TABS -->
+    <div class="mobile-tabs" id="mobileTabs">
+      <button class="mobile-tab active" data-target="globe">GLOBE</button>
+      <button class="mobile-tab" data-target="intel">INTEL PANELS</button>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main-content">
+      <!-- GLOBE -->
+      <div class="globe-container" id="globeContainer">
+        <canvas id="globe-canvas"></canvas>
+
+        <!-- HAMBURGER BUTTON -->
+        <button class="strike-menu-btn" id="strikeMenuBtn" title="Event List">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+            <rect y="2" width="18" height="2" rx="1" fill="currentColor"/>
+            <rect y="8" width="14" height="2" rx="1" fill="currentColor"/>
+            <rect y="14" width="10" height="2" rx="1" fill="currentColor"/>
+          </svg>
+        </button>
+
+        <!-- STRIKE LIST PANEL -->
+        <div class="strike-list-panel" id="strikeListPanel">
+          <div class="strike-list-header">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span class="strike-list-title">EVENT LOG</span>
+              <span class="strike-list-count" id="strikeListCount">50</span>
+            </div>
+            <button class="strike-list-close" id="strikeListClose">&times;</button>
+          </div>
+          <div class="strike-list-filters" id="strikeListFilters">
+            <button class="strike-filter active" data-cat="all">All</button>
+            <button class="strike-filter" data-cat="us-israel" style="--fc:#ef4444;">US/Israeli</button>
+            <button class="strike-filter" data-cat="iran" style="--fc:#06b6d4;">Iran</button>
+            <button class="strike-filter" data-cat="lebanon-strike" style="--fc:#eab308;">Lebanon</button>
+            <button class="strike-filter" data-cat="hezbollah" style="--fc:#f59e0b;">Hezbollah</button>
+            <button class="strike-filter" data-cat="other" style="--fc:#a0a0b8;">Other</button>
+          </div>
+          <div class="strike-list-body" id="strikeListBody"></div>
+        </div>
+
+        <div class="source-attribution">Data compiled from Reuters, Al Jazeera, CBS News, Wikipedia, ISW, MarineTraffic, NetBlocks | Feb 28 – Mar 2, 2026</div>
+        <div class="loading-overlay" id="loadingOverlay"><div class="loading-spinner"></div><div class="loading-text" id="loadingText">Loading Map Data</div></div>
+      </div>
+
+      <!-- OSINT SIDEBAR -->
+      <div class="osint-sidebar" id="osintSidebar">
+
+        <!-- PANEL 1: AIRSPACE CLOSURES -->
+        <div class="osint-panel" id="panel-airspace">
+          <div class="osint-panel-header" onclick="togglePanel('panel-airspace')">
+            <div class="osint-panel-title-area">
+              <div class="osint-panel-icon" style="background:#ef4444;box-shadow:0 0 6px rgba(239,68,68,0.5);"></div>
+              <span class="osint-panel-title">Airspace Closures</span>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="osint-panel-status status-critical">CRITICAL</span>
+              <span class="osint-panel-chevron">&#9660;</span>
+            </div>
+          </div>
+          <div class="osint-panel-body">
+            <div class="airport-grid">
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Iran (IKA)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Since Feb 28 — all airspace</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Israel — Ben Gurion (TLV)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Since Feb 28</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">UAE — Dubai (DXB)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">4 staff injured, 1 killed at Abu Dhabi. Emirates suspended until Mar 3 15:00 UAE</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">UAE — Abu Dhabi (AUH)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Drone intercepted, debris killed 1, injured 7. Etihad suspended until Mar 2 14:00</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Qatar — Hamad (DOH)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Qatar Airways suspended. 44 missiles and 8 drones targeted</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Kuwait (KWI)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Kuwait Airways suspended. 97 ballistic missiles, 283 drones intercepted. 1 dead, 30+ injured</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Bahrain (BAH)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">45 missiles, 9 drones targeted. US Fifth Fleet HQ hit</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Iraq (BGW / EBL)</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-detail">Baghdad and Erbil airports</div>
+              <div class="airport-row"><div class="airport-dot closed"></div><div class="airport-name">Syria</div><div class="airport-status" style="color:#ef4444;">CLOSED</div></div>
+              <div class="airport-row"><div class="airport-dot restricted"></div><div class="airport-name">Jordan</div><div class="airport-status" style="color:#eab308;">RESTRICTED</div></div>
+              <div class="airport-row"><div class="airport-dot partial"></div><div class="airport-name">Saudi Arabia</div><div class="airport-status" style="color:#f97316;">PARTIAL</div></div>
+              <div class="airport-row"><div class="airport-dot restricted"></div><div class="airport-name">Lebanon</div><div class="airport-status" style="color:#eab308;">RESTRICTED</div></div>
+            </div>
+            <div class="osint-stats-row">
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#ef4444;" id="flightsCancelled">5,000+</div>
+                <div class="osint-stat-label">Flights Cancelled</div>
+              </div>
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#eab308;">90,000</div>
+                <div class="osint-stat-label">Passengers/Day Affected</div>
+              </div>
+            </div>
+            <div class="osint-stats-row" style="margin-top:6px;">
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#f97316;">145</div>
+                <div class="osint-stat-label">Planes Diverted</div>
+              </div>
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:var(--color-text-muted);">10+</div>
+                <div class="osint-stat-label">Airlines Affected</div>
+              </div>
+            </div>
+            <div class="carrier-row">
+              <span class="carrier-tag">Emirates</span>
+              <span class="carrier-tag">Etihad</span>
+              <span class="carrier-tag">Qatar Airways</span>
+              <span class="carrier-tag">Lufthansa Group</span>
+              <span class="carrier-tag">KLM</span>
+              <span class="carrier-tag">Air France</span>
+              <span class="carrier-tag">Wizz Air</span>
+              <span class="carrier-tag">Turkish Airlines</span>
+              <span class="carrier-tag">Kuwait Airways</span>
+            </div>
+            <div class="osint-source">Sources: Reuters, FlightRadar24, Al Jazeera | Updated Mar 2, 2026</div>
+          </div>
+        </div>
+
+        <!-- PANEL 2: STRAIT OF HORMUZ -->
+        <div class="osint-panel" id="panel-hormuz">
+          <div class="osint-panel-header" onclick="togglePanel('panel-hormuz')">
+            <div class="osint-panel-title-area">
+              <div class="osint-panel-icon" style="background:#f97316;box-shadow:0 0 6px rgba(249,115,22,0.5);"></div>
+              <span class="osint-panel-title">Strait of Hormuz</span>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="osint-panel-status status-closed">RESTRICTED</span>
+              <span class="osint-panel-chevron">&#9660;</span>
+            </div>
+          </div>
+          <div class="osint-panel-body">
+            <div class="hormuz-map">
+              <canvas id="hormuzCanvas"></canvas>
+            </div>
+            <div style="margin-bottom:10px;">
+              <div class="shipping-row"><span class="shipping-label">Vessel Traffic Drop</span><span class="shipping-value" style="color:#ef4444;">&#8595; 70%</span></div>
+              <div class="shipping-row"><span class="shipping-label">Vessels Near Strait</span><span class="shipping-value" style="color:#f97316;">~240</span></div>
+              <div class="shipping-row"><span class="shipping-label">Containerships Stuck</span><span class="shipping-value" style="color:#eab308;">~170</span></div>
+              <div class="shipping-row"><span class="shipping-label">Capacity Stuck (TEU)</span><span class="shipping-value" style="color:#eab308;">450,000</span></div>
+              <div class="shipping-row"><span class="shipping-label">Oil Tankers in Iran Waters</span><span class="shipping-value" style="color:#f97316;">55</span></div>
+              <div class="shipping-row"><span class="shipping-label">&#8226; Laden / Empty</span><span class="shipping-value" style="color:var(--color-text-muted);">18 / 37</span></div>
+              <div class="shipping-row"><span class="shipping-label">LNG Tankers (halted)</span><span class="shipping-value" style="color:#eab308;">11</span></div>
+              <div class="shipping-row"><span class="shipping-label">Vessels Struck</span><span class="shipping-value" style="color:#ef4444;">3</span></div>
+              <div class="shipping-row"><span class="shipping-label">Oil Flow at Risk</span><span class="shipping-value" style="color:#ef4444;">8-10M bpd</span></div>
+              <div class="shipping-row"><span class="shipping-label">World Crude via Hormuz</span><span class="shipping-value" style="color:var(--color-text-muted);">20%</span></div>
+            </div>
+            <div style="padding:6px 8px;background:rgba(239,68,68,0.06);border:1px solid rgba(239,68,68,0.15);border-radius:4px;margin-bottom:8px;">
+              <div style="font-family:var(--font-mono);font-size:9px;color:#ef4444;font-weight:600;letter-spacing:0.08em;margin-bottom:2px;">IRGC VHF BROADCAST</div>
+              <div style="font-size:10px;color:var(--color-text-muted);font-style:italic;">"No ship allowed to pass"</div>
+            </div>
+            <div style="padding:6px 8px;background:rgba(6,182,212,0.06);border:1px solid rgba(6,182,212,0.15);border-radius:4px;margin-bottom:8px;">
+              <div style="font-family:var(--font-mono);font-size:9px;color:#06b6d4;font-weight:600;letter-spacing:0.08em;margin-bottom:2px;">US NAVY ADVISORY</div>
+              <div style="font-size:10px;color:var(--color-text-muted);">Warning against navigating operational zones</div>
+            </div>
+            <div class="carrier-row" style="margin-top:4px;">
+              <span class="carrier-tag">MSC &#x2717;</span>
+              <span class="carrier-tag">CMA CGM &#x2717;</span>
+              <span class="carrier-tag">Hapag-Lloyd &#x2717;</span>
+            </div>
+            <div class="osint-source">Sources: MarineTraffic, Lloyd's List, Reuters | Updated Mar 2, 2026</div>
+          </div>
+        </div>
+
+        <!-- PANEL 3: OIL PRICE IMPACT -->
+        <div class="osint-panel" id="panel-oil">
+          <div class="osint-panel-header" onclick="togglePanel('panel-oil')">
+            <div class="osint-panel-title-area">
+              <div class="osint-panel-icon" style="background:#22c55e;box-shadow:0 0 6px rgba(34,197,94,0.5);"></div>
+              <span class="osint-panel-title">Oil Price Impact</span>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="osint-panel-status" style="background:rgba(34,197,94,0.15);color:#22c55e;">+9.0%</span>
+              <span class="osint-panel-chevron">&#9660;</span>
+            </div>
+          </div>
+          <div class="osint-panel-body">
+            <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:4px;">
+              <div>
+                <div class="oil-price-label">BRENT CRUDE</div>
+                <div class="oil-price-current">
+                  <span class="oil-price-value">$79.41</span>
+                  <span class="oil-price-delta" style="color:#22c55e;">&#9650; +$6.54 (+9.0%)</span>
+                </div>
+              </div>
+              <div style="text-align:right;">
+                <div class="oil-price-label">WTI CRUDE</div>
+                <div style="font-family:var(--font-mono);font-size:15px;font-weight:600;color:var(--color-text-muted);font-variant-numeric:tabular-nums lining-nums;">$72.79 <span style="font-size:11px;color:#22c55e;">+8.6%</span></div>
+              </div>
+            </div>
+            <div class="oil-chart-container">
+              <canvas id="oilChart"></canvas>
+            </div>
+            <div style="margin-bottom:6px;">
+              <div class="shipping-row"><span class="shipping-label">Feb 27 Close (Brent)</span><span class="shipping-value" style="color:var(--color-text-muted);">$72.87</span></div>
+              <div class="shipping-row"><span class="shipping-label">Mar 2 Early (Brent)</span><span class="shipping-value" style="color:#22c55e;">$79.41</span></div>
+              <div class="shipping-row"><span class="shipping-label">Dated Brent (Feb 27)</span><span class="shipping-value" style="color:var(--color-text-muted);">$70.94</span></div>
+              <div class="shipping-row"><span class="shipping-label">Analyst Target (if Hormuz closed)</span><span class="shipping-value" style="color:#ef4444;">$100+</span></div>
+              <div class="shipping-row"><span class="shipping-label">OPEC+ Apr Increase</span><span class="shipping-value" style="color:var(--color-text-muted);">+206K bpd</span></div>
+              <div class="shipping-row"><span class="shipping-label">Iran Exports</span><span class="shipping-value" style="color:var(--color-text-muted);">1.6M bpd</span></div>
+              <div class="shipping-row"><span class="shipping-label">Potential Supply Loss</span><span class="shipping-value" style="color:#ef4444;">8-10M bpd</span></div>
+            </div>
+            <div class="osint-source">Sources: Reuters, Bloomberg, OPEC | Updated Mar 2, 2026</div>
+          </div>
+        </div>
+
+        <!-- PANEL 4: IRAN INTERNET BLACKOUT -->
+        <div class="osint-panel" id="panel-internet">
+          <div class="osint-panel-header" onclick="togglePanel('panel-internet')">
+            <div class="osint-panel-title-area">
+              <div class="osint-panel-icon" style="background:#a855f7;box-shadow:0 0 6px rgba(168,85,247,0.5);"></div>
+              <span class="osint-panel-title">Iran Internet</span>
+            </div>
+            <div style="display:flex;align-items:center;">
+              <span class="osint-panel-status status-blackout">BLACKOUT</span>
+              <span class="osint-panel-chevron">&#9660;</span>
+            </div>
+          </div>
+          <div class="osint-panel-body">
+            <div class="connectivity-gauge">
+              <canvas id="gaugeCanvas" width="240" height="240"></canvas>
+              <div class="connectivity-center">
+                <div class="connectivity-pct">4%</div>
+                <div class="connectivity-label">Connectivity</div>
+              </div>
+            </div>
+            <div class="osint-stats-row">
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#ef4444;">$37M</div>
+                <div class="osint-stat-label">Daily Econ Cost</div>
+              </div>
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#ef4444;">-80%</div>
+                <div class="osint-stat-label">Online Sales</div>
+              </div>
+            </div>
+            <div class="osint-stats-row" style="margin-top:6px;">
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#eab308;">450K</div>
+                <div class="osint-stat-label">TSE Points Lost</div>
+              </div>
+              <div class="osint-stat-card">
+                <div class="osint-stat-value" style="color:#06b6d4;">6,000</div>
+                <div class="osint-stat-label">Starlink Terminals</div>
+              </div>
+            </div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-text-dim);margin:10px 0 4px;">Blackout Timeline</div>
+            <div class="connectivity-timeline">
+              <div class="ct-step"><span class="ct-date">Jan 8</span><span class="ct-desc">Initial blackout during protests</span></div>
+              <div class="ct-step"><span class="ct-date">Jan 28</span><span class="ct-desc">Brief partial restoration</span></div>
+              <div class="ct-step"><span class="ct-date">Feb 16</span><span class="ct-desc">50% traffic reduction</span></div>
+              <div class="ct-step active"><span class="ct-date">Feb 28</span><span class="ct-desc">Near-total blackout renewed (strikes begin)</span></div>
+              <div class="ct-step active"><span class="ct-date">Mar 1</span><span class="ct-desc">1% connectivity measured</span></div>
+              <div class="ct-step active"><span class="ct-date">Mar 2</span><span class="ct-desc">4% connectivity — still near-total</span></div>
+            </div>
+            <div style="padding:6px 8px;background:rgba(168,85,247,0.06);border:1px solid rgba(168,85,247,0.15);border-radius:4px;margin:8px 0;">
+              <div style="font-family:var(--font-mono);font-size:9px;color:#a855f7;font-weight:600;letter-spacing:0.08em;margin-bottom:2px;">COUNTERMEASURES</div>
+              <div style="font-size:10px;color:var(--color-text-muted);line-height:1.5;">~400K Iranians abroad used Psiphon. ~6,000 Starlink terminals smuggled by US. Iran jamming GPS (30-80% packet loss). Govt working with Huawei/China on permanent kill switch.</div>
+            </div>
+            <div style="font-family:var(--font-mono);font-size:9px;letter-spacing:0.08em;text-transform:uppercase;color:var(--color-text-dim);margin:6px 0 4px;">Affected Networks</div>
+            <div class="network-tags">
+              <span class="network-tag">TCI</span>
+              <span class="network-tag">MCI</span>
+              <span class="network-tag">Irancell</span>
+              <span class="network-tag">Rightel</span>
+              <span class="network-tag">Shatel</span>
+            </div>
+            <div class="osint-source">Sources: NetBlocks, Cloudflare Radar, Psiphon | Updated Mar 2, 2026</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- STATS BAR -->
+    <div class="stats-bar">
+      <div class="stat-item"><span class="stat-value" id="statStrikes">50</span><span class="stat-label">Total Events</span></div>
+      <div class="stat-item"><span class="stat-value">6+</span><span class="stat-label">Confirmed KIA</span></div>
+      <div class="stat-item"><span class="stat-value">12</span><span class="stat-label">Countries Affected</span></div>
+      <div class="stat-item"><span class="stat-value">2</span><span class="stat-label">Active Operations</span></div>
+      <div class="stat-item"><span class="stat-value" style="color:var(--color-red);">CRITICAL</span><span class="stat-label">Threat Level</span></div>
+    </div>
+
+    <!-- TIMELINE -->
+    <div class="timeline-bar">
+      <span class="timeline-label">Timeline</span>
+      <div class="timeline-days">
+        <button class="timeline-day active" data-date="all"><div class="timeline-day-name">ALL</div><div class="timeline-day-date">96 Hours</div></button>
+        <button class="timeline-day" data-date="feb28"><div class="timeline-day-name">DAY 1</div><div class="timeline-day-date">Feb 28</div></button>
+        <button class="timeline-day" data-date="mar1"><div class="timeline-day-name">DAY 2</div><div class="timeline-day-date">Mar 1</div></button>
+        <button class="timeline-day" data-date="mar2"><div class="timeline-day-name">DAY 3</div><div class="timeline-day-date">Mar 2</div></button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+  <script>
+  (function() {
+    'use strict';
+
+    // ====== PANEL COLLAPSE/EXPAND ======
+    window.togglePanel = function(id) {
+      document.getElementById(id).classList.toggle('collapsed');
+    };
+
+    // ====== MOBILE TABS ======
+    document.querySelectorAll('.mobile-tab').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.mobile-tab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        var target = btn.dataset.target;
+        if (target === 'globe') {
+          document.getElementById('globeContainer').classList.remove('mobile-hidden');
+          document.getElementById('osintSidebar').classList.add('mobile-hidden');
+        } else {
+          document.getElementById('globeContainer').classList.add('mobile-hidden');
+          document.getElementById('osintSidebar').classList.remove('mobile-hidden');
+        }
+        handleResize();
+      });
+    });
+
+    // ====== DRAW CONNECTIVITY GAUGE ======
+    function drawGauge() {
+      var canvas = document.getElementById('gaugeCanvas');
+      if (!canvas) return;
+      var ctx = canvas.getContext('2d');
+      var w = canvas.width, h = canvas.height;
+      var cx = w / 2, cy = h / 2, r = 90;
+      ctx.clearRect(0, 0, w, h);
+      // Background arc
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0.75 * Math.PI, 2.25 * Math.PI);
+      ctx.strokeStyle = 'rgba(120,160,155,0.08)';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      // Value arc (4%)
+      var pct = 0.04;
+      var startAngle = 0.75 * Math.PI;
+      var endAngle = startAngle + pct * 1.5 * Math.PI;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, startAngle, endAngle);
+      ctx.strokeStyle = '#ef4444';
+      ctx.lineWidth = 12;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+      // Glow
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, startAngle, endAngle);
+      ctx.strokeStyle = 'rgba(239,68,68,0.3)';
+      ctx.lineWidth = 20;
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+    setTimeout(drawGauge, 100);
+
+    // ====== DRAW HORMUZ MINI MAP ======
+    function drawHormuzMap() {
+      var canvas = document.getElementById('hormuzCanvas');
+      if (!canvas) return;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      var ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+      var w = rect.width, h = rect.height;
+
+      // Background
+      ctx.fillStyle = '#0a1a1e';
+      ctx.fillRect(0, 0, w, h);
+
+      // Water
+      ctx.fillStyle = '#0c2a3a';
+      ctx.fillRect(0, 0, w, h);
+
+      // Simplified coastline — Iran (top), UAE/Oman (bottom)
+      ctx.fillStyle = '#2a3a2e';
+      // Iran coast (top)
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(w, 0);
+      ctx.lineTo(w, h * 0.25);
+      ctx.quadraticCurveTo(w * 0.75, h * 0.35, w * 0.6, h * 0.28);
+      ctx.quadraticCurveTo(w * 0.45, h * 0.22, w * 0.3, h * 0.3);
+      ctx.quadraticCurveTo(w * 0.15, h * 0.38, 0, h * 0.32);
+      ctx.closePath();
+      ctx.fill();
+
+      // UAE/Oman coast (bottom)
+      ctx.beginPath();
+      ctx.moveTo(0, h);
+      ctx.lineTo(w, h);
+      ctx.lineTo(w, h * 0.7);
+      ctx.quadraticCurveTo(w * 0.8, h * 0.65, w * 0.65, h * 0.72);
+      ctx.quadraticCurveTo(w * 0.5, h * 0.78, w * 0.35, h * 0.7);
+      ctx.quadraticCurveTo(w * 0.2, h * 0.62, 0, h * 0.68);
+      ctx.closePath();
+      ctx.fill();
+
+      // Strait restriction zone
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.08)';
+      ctx.fillRect(w * 0.3, h * 0.28, w * 0.4, h * 0.44);
+      ctx.strokeStyle = 'rgba(249, 115, 22, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([4, 3]);
+      ctx.strokeRect(w * 0.3, h * 0.28, w * 0.4, h * 0.44);
+      ctx.setLineDash([]);
+
+      // Ship clusters near Bandar Abbas
+      var ships = [
+        {x: 0.55, y: 0.4}, {x: 0.58, y: 0.42}, {x: 0.52, y: 0.38},
+        {x: 0.60, y: 0.38}, {x: 0.53, y: 0.43}, {x: 0.57, y: 0.36},
+        {x: 0.50, y: 0.41}, {x: 0.62, y: 0.41}, {x: 0.56, y: 0.45},
+        {x: 0.48, y: 0.44}, {x: 0.54, y: 0.35}, {x: 0.59, y: 0.44},
+        {x: 0.45, y: 0.47}, {x: 0.63, y: 0.45}, {x: 0.51, y: 0.47},
+        {x: 0.46, y: 0.50}, {x: 0.42, y: 0.48}, {x: 0.65, y: 0.43},
+        {x: 0.38, y: 0.50}, {x: 0.68, y: 0.46}, {x: 0.35, y: 0.52},
+        {x: 0.70, y: 0.50}, {x: 0.25, y: 0.52}, {x: 0.20, y: 0.50},
+        {x: 0.75, y: 0.52}, {x: 0.80, y: 0.55}, {x: 0.15, y: 0.48},
+      ];
+      ships.forEach(function(s) {
+        ctx.beginPath();
+        ctx.arc(s.x * w, s.y * h, 1.5, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(234, 179, 8, 0.7)';
+        ctx.fill();
+      });
+
+      // Blocked arrows
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.5)';
+      ctx.lineWidth = 1.5;
+      // Arrow pointing right (blocked)
+      ctx.beginPath();
+      ctx.moveTo(w * 0.38, h * 0.50);
+      ctx.lineTo(w * 0.58, h * 0.50);
+      ctx.stroke();
+      // X mark
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(w * 0.47, h * 0.46);
+      ctx.lineTo(w * 0.51, h * 0.54);
+      ctx.moveTo(w * 0.51, h * 0.46);
+      ctx.lineTo(w * 0.47, h * 0.54);
+      ctx.stroke();
+
+      // Labels
+      ctx.font = '600 8px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#ef4444';
+      ctx.textAlign = 'center';
+      ctx.fillText('RESTRICTED', w * 0.50, h * 0.62);
+
+      ctx.font = '500 7px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(200,220,215,0.45)';
+      ctx.fillText('IRAN', w * 0.50, h * 0.16);
+      ctx.fillText('UAE / OMAN', w * 0.50, h * 0.88);
+      ctx.fillText('Bandar Abbas', w * 0.58, h * 0.32);
+
+      // Vessel count badge
+      ctx.fillStyle = 'rgba(249, 115, 22, 0.2)';
+      var badgeW = 60, badgeH = 16;
+      ctx.beginPath();
+      ctx.roundRect(w * 0.02, h * 0.82, badgeW, badgeH, 3);
+      ctx.fill();
+      ctx.font = '600 8px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#f97316';
+      ctx.textAlign = 'left';
+      ctx.fillText('~240 vessels', w * 0.04, h * 0.82 + 11);
+    }
+    setTimeout(drawHormuzMap, 150);
+
+    // ====== DRAW OIL CHART ======
+    function drawOilChart() {
+      var canvas = document.getElementById('oilChart');
+      if (!canvas) return;
+      var rect = canvas.parentElement.getBoundingClientRect();
+      canvas.width = rect.width * 2;
+      canvas.height = rect.height * 2;
+      var ctx = canvas.getContext('2d');
+      ctx.scale(2, 2);
+      var w = rect.width, h = rect.height;
+      var pad = {top: 12, right: 10, bottom: 22, left: 38};
+      var cw = w - pad.left - pad.right;
+      var ch = h - pad.top - pad.bottom;
+
+      // Data
+      var brent = [
+        {t: 0, v: 73.50}, {t: 1, v: 73.10}, {t: 2, v: 72.50}, {t: 3, v: 72.87},
+        {t: 4, v: 72.87}, {t: 4.25, v: 74.50}, {t: 4.5, v: 76.80}, {t: 4.75, v: 78.50},
+        {t: 5, v: 79.00}, {t: 5.25, v: 80.20}, {t: 5.5, v: 79.80}, {t: 5.75, v: 79.50},
+        {t: 6, v: 79.20}, {t: 6.25, v: 79.41}
+      ];
+      var wti = [
+        {t: 0, v: 68.20}, {t: 1, v: 67.80}, {t: 2, v: 67.30}, {t: 3, v: 67.00},
+        {t: 4, v: 67.00}, {t: 4.25, v: 69.00}, {t: 4.5, v: 71.20}, {t: 4.75, v: 72.00},
+        {t: 5, v: 72.50}, {t: 5.25, v: 73.50}, {t: 5.5, v: 73.20}, {t: 5.75, v: 72.90},
+        {t: 6, v: 72.60}, {t: 6.25, v: 72.79}
+      ];
+
+      var minV = 65, maxV = 82;
+      var maxT = 6.5;
+
+      function tx(t) { return pad.left + (t / maxT) * cw; }
+      function ty(v) { return pad.top + (1 - (v - minV) / (maxV - minV)) * ch; }
+
+      // Background
+      ctx.fillStyle = 'rgba(6, 18, 22, 0.4)';
+      ctx.fillRect(0, 0, w, h);
+
+      // Grid lines
+      ctx.strokeStyle = 'rgba(120,160,155,0.06)';
+      ctx.lineWidth = 0.5;
+      for (var gv = 66; gv <= 82; gv += 2) {
+        ctx.beginPath();
+        ctx.moveTo(pad.left, ty(gv));
+        ctx.lineTo(w - pad.right, ty(gv));
+        ctx.stroke();
+      }
+
+      // Y-axis labels
+      ctx.font = '500 7px "JetBrains Mono", monospace';
+      ctx.fillStyle = 'rgba(200,220,215,0.3)';
+      ctx.textAlign = 'right';
+      for (var lv = 66; lv <= 82; lv += 4) {
+        ctx.fillText('$' + lv, pad.left - 4, ty(lv) + 3);
+      }
+
+      // X-axis labels
+      ctx.textAlign = 'center';
+      var dayLabels = ['Feb 24', 'Feb 25', 'Feb 26', 'Feb 27', 'Feb 28', 'Mar 1', 'Mar 2'];
+      for (var d = 0; d < 7; d++) {
+        ctx.fillText(dayLabels[d], tx(d + (d >= 4 ? 0.125 : 0)), h - 4);
+      }
+
+      // Strike annotation line
+      var strikeX = tx(4.1);
+      ctx.strokeStyle = 'rgba(239, 68, 68, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(strikeX, pad.top);
+      ctx.lineTo(strikeX, pad.top + ch);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '600 6px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#ef4444';
+      ctx.textAlign = 'center';
+      ctx.fillText('STRIKES', strikeX, pad.top + 8);
+
+      // Hormuz annotation
+      var hormuzX = tx(4.6);
+      ctx.strokeStyle = 'rgba(249, 115, 22, 0.25)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(hormuzX, pad.top);
+      ctx.lineTo(hormuzX, pad.top + ch);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.font = '600 6px "JetBrains Mono", monospace';
+      ctx.fillStyle = '#f97316';
+      ctx.fillText('HORMUZ', hormuzX, pad.top + 16);
+
+      // Brent fill gradient
+      ctx.beginPath();
+      ctx.moveTo(tx(brent[0].t), ty(brent[0].v));
+      for (var i = 1; i < brent.length; i++) {
+        ctx.lineTo(tx(brent[i].t), ty(brent[i].v));
+      }
+      ctx.lineTo(tx(brent[brent.length - 1].t), pad.top + ch);
+      ctx.lineTo(tx(brent[0].t), pad.top + ch);
+      ctx.closePath();
+      var grad = ctx.createLinearGradient(0, pad.top, 0, pad.top + ch);
+      grad.addColorStop(0, 'rgba(34, 197, 94, 0.12)');
+      grad.addColorStop(1, 'rgba(34, 197, 94, 0.01)');
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Brent line
+      ctx.beginPath();
+      ctx.moveTo(tx(brent[0].t), ty(brent[0].v));
+      for (var j = 1; j < brent.length; j++) {
+        ctx.lineTo(tx(brent[j].t), ty(brent[j].v));
+      }
+      ctx.strokeStyle = '#22c55e';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+
+      // WTI line
+      ctx.beginPath();
+      ctx.moveTo(tx(wti[0].t), ty(wti[0].v));
+      for (var k = 1; k < wti.length; k++) {
+        ctx.lineTo(tx(wti[k].t), ty(wti[k].v));
+      }
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.6)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 2]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Current price dots
+      var lastB = brent[brent.length - 1];
+      var lastW = wti[wti.length - 1];
+      ctx.beginPath();
+      ctx.arc(tx(lastB.t), ty(lastB.v), 3, 0, Math.PI * 2);
+      ctx.fillStyle = '#22c55e';
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(tx(lastW.t), ty(lastW.v), 2.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#06b6d4';
+      ctx.fill();
+
+      // Legend
+      ctx.font = '500 7px "JetBrains Mono", monospace';
+      ctx.textAlign = 'left';
+      ctx.fillStyle = '#22c55e';
+      ctx.fillText('— Brent', w - pad.right - 72, pad.top + 10);
+      ctx.fillStyle = 'rgba(6, 182, 212, 0.7)';
+      ctx.fillText('--- WTI', w - pad.right - 72, pad.top + 20);
+    }
+    setTimeout(drawOilChart, 200);
+
+    // ====== MIDDLE EAST COUNTRY IDS ======
+    var ME_IDS = ['364','368','376','400','414','422','512','634','682','760','784','792','196','818','887','275'];
+
+    // ====== EVENT DATA (42 events) ======
+    var EVENTS = [
+      {id:1,lat:35.6892,lon:51.389,name:"Tehran",desc:"Khamenei compound, government ministries, IRGC HQ, intelligence sites",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28 – Mar 2"},
+      {id:2,lat:32.6546,lon:51.668,name:"Isfahan",desc:"Nuclear facilities, military sites, ballistic missile facilities",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:3,lat:28.9234,lon:50.8203,name:"Bushehr",desc:"Nuclear reactor area, port city",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:4,lat:34.6399,lon:50.8759,name:"Qom",desc:"Holy city, military targets",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:5,lat:35.84,lon:50.9391,name:"Karaj",desc:"Military/industrial sites",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:6,lat:34.3142,lon:47.065,name:"Kermanshah",desc:"Western Iran, missile launchers",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:7,lat:38.08,lon:46.2919,name:"Tabriz",desc:"Northwest Iran, IRGC facilities",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:8,lat:29.5918,lon:52.5837,name:"Shiraz",desc:"Southern Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:9,lat:33.6374,lon:46.4227,name:"Ilam",desc:"Western Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:10,lat:33.4922,lon:48.3543,name:"Lorestan Province",desc:"Western Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:11,lat:36.6736,lon:48.4787,name:"Zanjan",desc:"Northwest Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:12,lat:37.5527,lon:45.0761,name:"Urmia",desc:"Northwest Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:13,lat:35.7183,lon:52.0675,name:"Damavand",desc:"Near Tehran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:14,lat:35.52,lon:51.77,name:"Parchin Military Complex",desc:"Near Tehran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:15,lat:25.2919,lon:60.643,name:"Chabahar",desc:"IRGC Navy Base, southeast Iran",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28"},
+      {id:16,lat:26.5,lon:54,name:"Persian Gulf",desc:"Iranian naval vessels targeted",category:"us-israel",date:"feb28",color:0xef4444,hex:"#ef4444",dates:"Feb 28 – Mar 1"},
+      {id:17,lat:32.95,lon:44.1,name:"Jurf al-Sakhr, Iraq",desc:"Kataib Hezbollah stronghold south of Baghdad",category:"us-israel",date:"feb28",color:0xf97316,hex:"#f97316",dates:"Feb 28"},
+      {id:18,lat:33.8547,lon:35.494,name:"Beirut (Dahieh)",desc:"Hezbollah targets in southern suburbs, senior members targeted",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:19,lat:33.32,lon:35.38,name:"Srifa",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:20,lat:33.3779,lon:35.4838,name:"Nabatieh",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:21,lat:33.35,lon:35.42,name:"Haris",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:22,lat:33.36,lon:35.45,name:"Mayfadoun",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:23,lat:33.31,lon:35.35,name:"Deir Qanoun al-Nahr",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:24,lat:33.29,lon:35.33,name:"al-Shahabiya",desc:"Southern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:25,lat:33.85,lon:36,name:"Beqaa Valley",desc:"Eastern Lebanon strike",category:"lebanon-strike",date:"mar2",color:0xeab308,hex:"#eab308",dates:"Mar 2"},
+      {id:26,lat:31.7469,lon:34.9882,name:"Beit Shemesh, Israel",desc:"Missiles killed 6 people",category:"iran",date:"mar1",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 1"},
+      {id:27,lat:32.0853,lon:34.7818,name:"Tel Aviv, Israel",desc:"Missile strikes on metro area",category:"iran",date:"mar1",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 1"},
+      {id:28,lat:32.794,lon:34.9896,name:"Haifa, Israel",desc:"Air raid sirens, missile intercepts",category:"iran",date:"mar2",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 2"},
+      {id:29,lat:26.2285,lon:50.586,name:"Bahrain",desc:"US Fifth Fleet HQ, Mina Salman port targeted",category:"iran",date:"feb28",color:0x06b6d4,hex:"#06b6d4",dates:"Feb 28 – Mar 2"},
+      {id:30,lat:25.1172,lon:51.315,name:"Qatar",desc:"Al Udeid Air Base area, Doha",category:"iran",date:"feb28",color:0x06b6d4,hex:"#06b6d4",dates:"Feb 28 – Mar 2"},
+      {id:31,lat:24.2482,lon:54.5481,name:"UAE (Al Dhafra)",desc:"Al Dhafra Air Base, Abu Dhabi",category:"iran",date:"feb28",color:0x06b6d4,hex:"#06b6d4",dates:"Feb 28 – Mar 2"},
+      {id:32,lat:25.2048,lon:55.2708,name:"Dubai, UAE",desc:"Airports, Palm Jumeirah, Burj Al Arab, Port of Jebel Ali",category:"iran",date:"mar1",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 1"},
+      {id:33,lat:29.2265,lon:47.689,name:"Kuwait",desc:"Ali al-Salem Air Base, Kuwait Intl Airport",category:"iran",date:"feb28",color:0x06b6d4,hex:"#06b6d4",dates:"Feb 28 – Mar 2"},
+      {id:34,lat:31.8367,lon:36.3106,name:"Jordan",desc:"Al Muwaqqar Air Base",category:"iran",date:"feb28",color:0x06b6d4,hex:"#06b6d4",dates:"Feb 28"},
+      {id:35,lat:24.7136,lon:46.6753,name:"Riyadh, Saudi Arabia",desc:"Explosions heard in capital",category:"iran",date:"mar2",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 2"},
+      {id:36,lat:23.61,lon:58.54,name:"Oman",desc:"Port and tanker off coast targeted",category:"iran",date:"mar1",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 1"},
+      {id:37,lat:36.2375,lon:44.0069,name:"Erbil, Iraq",desc:"Airport targeted by drone",category:"iran",date:"mar1",color:0x14b8a6,hex:"#14b8a6",dates:"Mar 1"},
+      {id:38,lat:33.2628,lon:44.2346,name:"Baghdad, Iraq",desc:"Victory Base near Baghdad Airport",category:"iran",date:"mar2",color:0x14b8a6,hex:"#14b8a6",dates:"Mar 2"},
+      {id:39,lat:32.794,lon:34.9896,name:"Haifa (Mishmar HaCarmel)",desc:"Missile defense site targeted by Hezbollah",category:"hezbollah",date:"mar2",color:0xf59e0b,hex:"#f59e0b",dates:"Mar 2"},
+      {id:40,lat:33.05,lon:35.5,name:"Upper Galilee",desc:"Rockets and drones from Hezbollah",category:"hezbollah",date:"mar2",color:0xf59e0b,hex:"#f59e0b",dates:"Mar 2"},
+      {id:41,lat:35.1264,lon:33.4299,name:"Cyprus",desc:"2 Iranian ballistic missiles fired toward Cyprus",category:"other",date:"mar1",color:0xa0a0b8,hex:"#a0a0b8",dates:"Mar 1"},
+      {id:42,lat:26.5667,lon:56.25,name:"Strait of Hormuz",desc:"IRGC attempted closure of strait",category:"other",date:"feb28",color:0xa0a0b8,hex:"#a0a0b8",dates:"Feb 28"},
+      {id:43,lat:35.6892,lon:51.389,name:"Tehran (Day 2)",desc:"Continued strikes on capital center. B-2 stealth bombers hit hardened ballistic missile facilities with 2,000 lb bombs. IAF achieved aerial dominance over Tehran.",category:"us-israel",date:"mar1",color:0xef4444,hex:"#ef4444",dates:"Mar 1"},
+      {id:44,lat:32.6546,lon:51.668,name:"Isfahan (Day 2)",desc:"Continued strikes on nuclear and military infrastructure. CENTCOM reports over 1,000 Iranian sites targeted since start.",category:"us-israel",date:"mar1",color:0xef4444,hex:"#ef4444",dates:"Mar 1"},
+      {id:45,lat:27.15,lon:56.25,name:"Iranian Naval Targets",desc:"9 Iranian naval vessels destroyed. Naval facility at Bandar Abbas struck. Trump: 'We're going to annihilate their navy.'",category:"us-israel",date:"mar1",color:0xef4444,hex:"#ef4444",dates:"Mar 1"},
+      {id:46,lat:35.6892,lon:51.50,name:"Tehran (Day 3)",desc:"Strikes on Tehran intensified. Netanyahu: 'strikes will increase even more in the coming days.' Intelligence, security, military command installations hit.",category:"us-israel",date:"mar2",color:0xef4444,hex:"#ef4444",dates:"Mar 2"},
+      {id:47,lat:34.00,lon:51.00,name:"Iran Air Defenses (Day 3)",desc:"Continued degradation of Iranian air defense systems. IAF operating with aerial dominance over Tehran airspace.",category:"us-israel",date:"mar2",color:0xef4444,hex:"#ef4444",dates:"Mar 2"},
+      {id:48,lat:35.75,lon:50.95,name:"IRGC Command Centers",desc:"Strikes targeting IRGC HQ across multiple provinces. Entire military command reported eliminated by Trump.",category:"us-israel",date:"mar2",color:0xef4444,hex:"#ef4444",dates:"Mar 2"},
+      {id:49,lat:26.00,lon:57.00,name:"Iranian Navy (Day 3)",desc:"Continued strikes on Iranian naval assets in Persian Gulf and Gulf of Oman. Chabahar IRGC Navy base re-struck.",category:"us-israel",date:"mar2",color:0xef4444,hex:"#ef4444",dates:"Mar 2"},
+      {id:50,lat:24.90,lon:46.40,name:"Saudi Aramco Refinery",desc:"Saudi Aramco refinery hit amid Iranian retaliatory strikes across Gulf region.",category:"iran",date:"mar2",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 2"}
+    ];
+
+    // ====== ARC DATA (23 arcs) ======
+    var ARCS = [
+      {from:[31,34.8],to:[35.6892,51.389],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[32.6546,51.668],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[28.9234,50.8203],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[34.6399,50.8759],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[38.08,46.2919],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[25.2919,60.643],color:0xef4444,date:"feb28"},
+      {from:[31,34.8],to:[33.8547,35.494],color:0xeab308,date:"mar2"},
+      {from:[31,34.8],to:[33.3779,35.4838],color:0xeab308,date:"mar2"},
+      {from:[31,34.8],to:[33.85,36],color:0xeab308,date:"mar2"},
+      {from:[35.7,51.4],to:[31.7469,34.9882],color:0x06b6d4,date:"mar1"},
+      {from:[35.7,51.4],to:[32.0853,34.7818],color:0x06b6d4,date:"mar1"},
+      {from:[35.7,51.4],to:[32.794,34.9896],color:0x06b6d4,date:"mar2"},
+      {from:[35.7,51.4],to:[26.2285,50.586],color:0x06b6d4,date:"feb28"},
+      {from:[35.7,51.4],to:[25.1172,51.315],color:0x06b6d4,date:"feb28"},
+      {from:[35.7,51.4],to:[24.2482,54.5481],color:0x06b6d4,date:"feb28"},
+      {from:[35.7,51.4],to:[25.2048,55.2708],color:0x06b6d4,date:"mar1"},
+      {from:[35.7,51.4],to:[29.2265,47.689],color:0x06b6d4,date:"feb28"},
+      {from:[35.7,51.4],to:[31.8367,36.3106],color:0x06b6d4,date:"feb28"},
+      {from:[35.7,51.4],to:[24.7136,46.6753],color:0x06b6d4,date:"mar2"},
+      {from:[35.7,51.4],to:[35.1264,33.4299],color:0x06b6d4,date:"mar1"},
+      {from:[33.85,35.5],to:[32.794,34.9896],color:0xf59e0b,date:"mar2"},
+      {from:[33.85,35.5],to:[33.05,35.5],color:0xf59e0b,date:"mar2"},
+      {from:[31,34.8],to:[32.95,44.1],color:0xf97316,date:"feb28"},
+      {from:[31,34.8],to:[35.6892,51.389],color:0xef4444,date:"mar1"},
+      {from:[31,34.8],to:[32.6546,51.668],color:0xef4444,date:"mar1"},
+      {from:[31,34.8],to:[27.15,56.25],color:0xef4444,date:"mar1"},
+      {from:[31,34.8],to:[35.6892,51.50],color:0xef4444,date:"mar2"},
+      {from:[31,34.8],to:[34.00,51.00],color:0xef4444,date:"mar2"},
+      {from:[31,34.8],to:[35.75,50.95],color:0xef4444,date:"mar2"},
+      {from:[31,34.8],to:[26.00,57.00],color:0xef4444,date:"mar2"}
+    ];
+
+    // ====== AIRPORT LOCATIONS for globe no-fly overlays ======
+    var AIRPORTS = [
+      {code:'DXB',lat:25.2532,lon:55.3657},{code:'AUH',lat:24.4330,lon:54.6511},
+      {code:'DOH',lat:25.2731,lon:51.6081},{code:'KWI',lat:29.2266,lon:47.9689},
+      {code:'BAH',lat:26.2708,lon:50.6336},{code:'BGW',lat:33.2625,lon:44.2346},
+      {code:'EBL',lat:36.2376,lon:43.9632},{code:'TLV',lat:32.0114,lon:34.8867},
+      {code:'IKA',lat:35.4161,lon:51.1522}
+    ];
+
+    // ====== THREE.JS SETUP ======
+    var R = 5;
+    var scene, camera, renderer;
+    var rotGroup, markerGroup, arcGroup, glowGroup, mapGroup, overlayGroup;
+    var markerMeshes = [], arcDots = [];
+    var activeFilter = 'all';
+    var raycaster = new THREE.Raycaster();
+    var mouse = new THREE.Vector2();
+    var clockT = 0;
+    var isAutoRotating = true;
+    var isDragging = false;
+    var prevMouse = {x:0,y:0};
+    var camDist = 11;
+    var camTheta = 0, camPhi = 0;
+    var hormuzPulseGroup;
+    var iranOverlayMesh;
+
+    function ll2v(lat, lon, r) {
+      var phi = (90 - lat) * Math.PI / 180;
+      var theta = (lon + 180) * Math.PI / 180;
+      return new THREE.Vector3(
+        -r * Math.sin(phi) * Math.cos(theta),
+        r * Math.cos(phi),
+        r * Math.sin(phi) * Math.sin(theta)
+      );
+    }
+
+    function vis(e) { return activeFilter === 'all' || e.date === activeFilter; }
+
+    function initCamera() {
+      var mePoint = ll2v(28, 48, camDist);
+      camera.position.copy(mePoint);
+      camera.lookAt(0, 0, 0);
+      camTheta = Math.atan2(mePoint.x, mePoint.z);
+      camPhi = Math.acos(mePoint.y / camDist);
+    }
+
+    function updateCamera() {
+      camera.position.set(
+        camDist * Math.sin(camPhi) * Math.sin(camTheta),
+        camDist * Math.cos(camPhi),
+        camDist * Math.sin(camPhi) * Math.cos(camTheta)
+      );
+      camera.lookAt(0, 0, 0);
+    }
+
+    function drawCountryLines(topoData) {
+      var countries = topojson.feature(topoData, topoData.objects.countries);
+      var landMaterial = new THREE.MeshBasicMaterial({
+        color: 0x2a3a2e, transparent: true, opacity: 0.85, side: THREE.DoubleSide
+      });
+      var meLandMaterial = new THREE.MeshBasicMaterial({
+        color: 0x3a4a38, transparent: true, opacity: 0.9, side: THREE.DoubleSide
+      });
+      // Iran darkened overlay material
+      var iranLandMaterial = new THREE.MeshBasicMaterial({
+        color: 0x121a14, transparent: true, opacity: 0.95, side: THREE.DoubleSide
+      });
+      var borderMaterial = new THREE.LineBasicMaterial({color: 0x6a8a80, transparent: true, opacity: 0.5});
+      var meBorderMaterial = new THREE.LineBasicMaterial({color: 0x8ab0a0, transparent: true, opacity: 0.75});
+
+      countries.features.forEach(function(feature) {
+        var isME = ME_IDS.indexOf(feature.id) !== -1;
+        var isIran = feature.id === '364';
+        var mat = isIran ? iranLandMaterial : (isME ? meLandMaterial : landMaterial);
+        var bMat = isME ? meBorderMaterial : borderMaterial;
+
+        var coords = [];
+        if (feature.geometry.type === 'Polygon') {
+          coords = [feature.geometry.coordinates];
+        } else if (feature.geometry.type === 'MultiPolygon') {
+          coords = feature.geometry.coordinates;
+        }
+
+        coords.forEach(function(polygon) {
+          polygon.forEach(function(ring, ringIndex) {
+            if (ring.length < 3) return;
+            var linePoints = [];
+            for (var i = 0; i < ring.length; i++) {
+              linePoints.push(ll2v(ring[i][1], ring[i][0], R + 0.008));
+            }
+            if (linePoints.length > 1) {
+              var lineGeo = new THREE.BufferGeometry().setFromPoints(linePoints);
+              mapGroup.add(new THREE.Line(lineGeo, bMat));
+            }
+            if (ringIndex === 0 && ring.length >= 3) {
+              try {
+                var positions = [];
+                var centLat = 0, centLon = 0;
+                for (var j = 0; j < ring.length; j++) {
+                  centLon += ring[j][0]; centLat += ring[j][1];
+                }
+                centLat /= ring.length; centLon /= ring.length;
+                var centerPt = ll2v(centLat, centLon, R + 0.003);
+                for (var k = 0; k < ring.length - 1; k++) {
+                  var p1 = ll2v(ring[k][1], ring[k][0], R + 0.003);
+                  var p2 = ll2v(ring[k+1][1], ring[k+1][0], R + 0.003);
+                  positions.push(centerPt.x, centerPt.y, centerPt.z);
+                  positions.push(p1.x, p1.y, p1.z);
+                  positions.push(p2.x, p2.y, p2.z);
+                }
+                if (positions.length > 0) {
+                  var triGeo = new THREE.BufferGeometry();
+                  triGeo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+                  triGeo.computeVertexNormals();
+                  mapGroup.add(new THREE.Mesh(triGeo, mat));
+                }
+              } catch(e) {}
+            }
+          });
+        });
+      });
+    }
+
+    function drawGraticule() {
+      var gm = new THREE.LineBasicMaterial({color: 0x1a2e2a, transparent: true, opacity: 0.2});
+      for (var lat = -75; lat <= 75; lat += 15) {
+        var pts = [];
+        for (var lon = 0; lon <= 360; lon += 3) pts.push(ll2v(lat, lon - 180, R + 0.006));
+        rotGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), gm));
+      }
+      for (var lon2 = -180; lon2 < 180; lon2 += 15) {
+        var pts2 = [];
+        for (var lat2 = -90; lat2 <= 90; lat2 += 3) pts2.push(ll2v(lat2, lon2, R + 0.006));
+        rotGroup.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts2), gm));
+      }
+    }
+
+    function buildAtmosphere() {
+      var geo = new THREE.SphereGeometry(R * 1.08, 64, 64);
+      var mat = new THREE.ShaderMaterial({
+        vertexShader: 'varying vec3 vN;void main(){vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',
+        fragmentShader: 'varying vec3 vN;void main(){float i=pow(0.65-dot(vN,vec3(0,0,1)),2.5);gl_FragColor=vec4(0.1,0.3,0.35,1)*i*0.7;}',
+        blending: THREE.AdditiveBlending, side: THREE.BackSide, transparent: true
+      });
+      scene.add(new THREE.Mesh(geo, mat));
+    }
+
+    function buildStars() {
+      var n = 2500, pos = new Float32Array(n * 3);
+      for (var i = 0; i < n; i++) {
+        var r = 50 + Math.random() * 150, t = Math.random() * Math.PI * 2, p = Math.acos(2 * Math.random() - 1);
+        pos[i*3] = r*Math.sin(p)*Math.cos(t);
+        pos[i*3+1] = r*Math.sin(p)*Math.sin(t);
+        pos[i*3+2] = r*Math.cos(p);
+      }
+      var geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+      scene.add(new THREE.Points(geo, new THREE.PointsMaterial({color: 0x4a6660, size: 0.15, sizeAttenuation: true})));
+    }
+
+    function buildMarkers() {
+      markerMeshes = [];
+      while (markerGroup.children.length) markerGroup.remove(markerGroup.children[0]);
+      while (glowGroup.children.length) glowGroup.remove(glowGroup.children[0]);
+      EVENTS.forEach(function(evt) {
+        if (!vis(evt)) return;
+        var p = ll2v(evt.lat, evt.lon, R + 0.02);
+        var m = new THREE.Mesh(
+          new THREE.SphereGeometry(0.045, 12, 12),
+          new THREE.MeshBasicMaterial({color: evt.color})
+        );
+        m.position.copy(p);
+        m.userData = {event: evt};
+        markerGroup.add(m);
+        markerMeshes.push(m);
+        var ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.06, 0.13, 24),
+          new THREE.MeshBasicMaterial({color: evt.color, transparent: true, opacity: 0.3, side: THREE.DoubleSide})
+        );
+        ring.position.copy(p);
+        ring.lookAt(0, 0, 0);
+        ring.userData = {ps: 1.2 + Math.random() * 1.8};
+        glowGroup.add(ring);
+        var sh = 0.08 + Math.random() * 0.06;
+        var spike = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.008, 0.008, sh, 4),
+          new THREE.MeshBasicMaterial({color: evt.color, transparent: true, opacity: 0.55})
+        );
+        var sp = ll2v(evt.lat, evt.lon, R + 0.02 + sh / 2);
+        spike.position.copy(sp);
+        spike.lookAt(0, 0, 0);
+        spike.rotateX(Math.PI / 2);
+        glowGroup.add(spike);
+      });
+    }
+
+    function buildArcs() {
+      arcDots = [];
+      while (arcGroup.children.length) arcGroup.remove(arcGroup.children[0]);
+      ARCS.forEach(function(arc) {
+        if (activeFilter !== 'all' && arc.date !== activeFilter) return;
+        var start = ll2v(arc.from[0], arc.from[1], R + 0.025);
+        var end = ll2v(arc.to[0], arc.to[1], R + 0.025);
+        var mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
+        var dist = start.distanceTo(end);
+        mid.normalize().multiplyScalar(R + 0.025 + dist * 0.28);
+        var curve = new THREE.QuadraticBezierCurve3(start, mid, end);
+        var pts = curve.getPoints(50);
+        var positions = [], colors = [];
+        var col = new THREE.Color(arc.color);
+        for (var i = 0; i < pts.length; i++) {
+          positions.push(pts[i].x, pts[i].y, pts[i].z);
+          var fade = Math.sin((i / pts.length) * Math.PI);
+          colors.push(col.r * fade, col.g * fade, col.b * fade);
+        }
+        var geo = new THREE.BufferGeometry();
+        geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+        arcGroup.add(new THREE.Line(geo, new THREE.LineBasicMaterial({vertexColors: true, transparent: true, opacity: 0.5})));
+        var dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.03, 6, 6),
+          new THREE.MeshBasicMaterial({color: arc.color, transparent: true, opacity: 0.9})
+        );
+        dot.userData = {curve: curve, speed: 0.12 + Math.random() * 0.15, progress: Math.random()};
+        arcGroup.add(dot);
+        arcDots.push(dot);
+      });
+    }
+
+    // ====== AIRPORT NO-FLY ZONE OVERLAYS ======
+    function buildAirportOverlays() {
+      AIRPORTS.forEach(function(ap) {
+        var p = ll2v(ap.lat, ap.lon, R + 0.015);
+        // Red dome circle
+        var ring = new THREE.Mesh(
+          new THREE.RingGeometry(0.12, 0.22, 32),
+          new THREE.MeshBasicMaterial({color: 0xef4444, transparent: true, opacity: 0.12, side: THREE.DoubleSide})
+        );
+        ring.position.copy(p);
+        ring.lookAt(0, 0, 0);
+        overlayGroup.add(ring);
+        // Inner fill
+        var disc = new THREE.Mesh(
+          new THREE.CircleGeometry(0.12, 32),
+          new THREE.MeshBasicMaterial({color: 0xef4444, transparent: true, opacity: 0.06, side: THREE.DoubleSide})
+        );
+        disc.position.copy(p);
+        disc.lookAt(0, 0, 0);
+        overlayGroup.add(disc);
+      });
+    }
+
+    // ====== HORMUZ PULSING ZONE ======
+    function buildHormuzZone() {
+      hormuzPulseGroup = new THREE.Group();
+      var center = ll2v(26.5, 56.3, R + 0.012);
+      // Amber zone ring
+      var ring1 = new THREE.Mesh(
+        new THREE.RingGeometry(0.2, 0.45, 32),
+        new THREE.MeshBasicMaterial({color: 0xf97316, transparent: true, opacity: 0.08, side: THREE.DoubleSide})
+      );
+      ring1.position.copy(center);
+      ring1.lookAt(0, 0, 0);
+      ring1.userData = {isHormuz: true};
+      hormuzPulseGroup.add(ring1);
+      var ring2 = new THREE.Mesh(
+        new THREE.RingGeometry(0.44, 0.46, 32),
+        new THREE.MeshBasicMaterial({color: 0xf97316, transparent: true, opacity: 0.25, side: THREE.DoubleSide})
+      );
+      ring2.position.copy(center);
+      ring2.lookAt(0, 0, 0);
+      ring2.userData = {isHormuz: true};
+      hormuzPulseGroup.add(ring2);
+      overlayGroup.add(hormuzPulseGroup);
+    }
+
+    // ====== EVENT SELECTION ======
+    function selectEvent(evt) {
+      // Show a small tooltip overlay on the globe container
+      var existing = document.getElementById('eventTooltip');
+      if (existing) existing.remove();
+      var tooltip = document.createElement('div');
+      tooltip.id = 'eventTooltip';
+      tooltip.style.cssText = 'position:absolute;top:12px;left:12px;max-width:300px;background:rgba(8,22,26,0.95);border:1px solid rgba(120,160,155,0.15);border-radius:6px;padding:12px;z-index:50;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);';
+      var cats = {'us-israel':'US/Israeli Strike','iran':'Iranian Retaliation','lebanon-strike':'Israeli Strike on Lebanon','hezbollah':'Hezbollah Strike','other':'Other Event'};
+      tooltip.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:'+evt.hex+';box-shadow:0 0 8px '+evt.hex+'40;flex-shrink:0;"></div><div><div style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--color-white);">'+evt.name+'</div><div style="font-family:var(--font-mono);font-size:9px;color:'+evt.hex+';margin-top:1px;">'+cats[evt.category]+'</div></div><button onclick="this.parentElement.parentElement.remove()" style="margin-left:auto;background:none;border:none;color:var(--color-text-dim);cursor:pointer;font-size:14px;padding:4px;">&times;</button></div><div style="font-size:11px;color:var(--color-text-muted);line-height:1.5;margin-bottom:6px;">'+evt.desc+'</div><div style="font-family:var(--font-mono);font-size:9px;color:var(--color-text-dim);">'+evt.dates+' &nbsp;|&nbsp; '+evt.lat.toFixed(4)+'°N, '+evt.lon.toFixed(4)+'°E</div>';
+      document.getElementById('globeContainer').appendChild(tooltip);
+    }
+
+    // ====== ANIMATION LOOP ======
+    var lastTime = 0;
+    function animate(time) {
+      requestAnimationFrame(animate);
+      var dt = (time - lastTime) / 1000;
+      if (dt > 0.1) dt = 0.016;
+      lastTime = time;
+      clockT += dt;
+      if (isAutoRotating) {
+        camTheta += dt * 0.02;
+        updateCamera();
+      }
+      // Pulse glow rings
+      for (var i = 0; i < glowGroup.children.length; i++) {
+        var ch = glowGroup.children[i];
+        if (ch.userData.ps) {
+          var p = Math.sin(clockT * ch.userData.ps) * 0.3 + 0.6;
+          ch.material.opacity = 0.35 * p;
+          var s = 0.85 + p * 0.35;
+          ch.scale.set(s, s, s);
+        }
+      }
+      // Animate arc dots
+      for (var j = 0; j < arcDots.length; j++) {
+        var dot = arcDots[j];
+        if (dot.userData.curve) {
+          dot.userData.progress += dt * dot.userData.speed;
+          if (dot.userData.progress > 1) dot.userData.progress -= 1;
+          dot.position.copy(dot.userData.curve.getPoint(dot.userData.progress));
+          dot.material.opacity = Math.sin(dot.userData.progress * Math.PI) * 0.9;
+        }
+      }
+      // Pulse Hormuz zone
+      if (hormuzPulseGroup) {
+        hormuzPulseGroup.children.forEach(function(ch) {
+          if (ch.userData.isHormuz) {
+            ch.material.opacity = (0.06 + Math.sin(clockT * 1.5) * 0.04);
+          }
+        });
+      }
+      renderer.render(scene, camera);
+    }
+
+    // ====== INIT ======
+    function init(topoData) {
+      var canvas = document.getElementById('globe-canvas');
+      var container = document.getElementById('globeContainer');
+      var W = container.clientWidth, H = container.clientHeight;
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x0a1a1e);
+      camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1000);
+      renderer = new THREE.WebGLRenderer({canvas: canvas, antialias: true});
+      renderer.setSize(W, H);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+      scene.add(new THREE.AmbientLight(0x5a7870, 1.2));
+      var dL = new THREE.DirectionalLight(0x88aa99, 1.0);
+      dL.position.set(5, 3, 5);
+      scene.add(dL);
+
+      rotGroup = new THREE.Group();
+      scene.add(rotGroup);
+      mapGroup = new THREE.Group();
+      markerGroup = new THREE.Group();
+      arcGroup = new THREE.Group();
+      glowGroup = new THREE.Group();
+      overlayGroup = new THREE.Group();
+      rotGroup.add(mapGroup);
+      rotGroup.add(markerGroup);
+      rotGroup.add(arcGroup);
+      rotGroup.add(glowGroup);
+      rotGroup.add(overlayGroup);
+
+      // Ocean sphere
+      rotGroup.add(new THREE.Mesh(
+        new THREE.SphereGeometry(R, 96, 96),
+        new THREE.MeshPhongMaterial({color: 0x0c2a3a, emissive: 0x061418, specular: 0x1a3a3a, shininess: 30})
+      ));
+
+      document.getElementById('loadingText').textContent = 'Rendering Countries';
+      drawCountryLines(topoData);
+      drawGraticule();
+      buildAtmosphere();
+      buildStars();
+      buildMarkers();
+      buildArcs();
+      buildAirportOverlays();
+      buildHormuzZone();
+      initCamera();
+
+      // Mouse controls
+      canvas.addEventListener('pointerdown', function(e) {
+        isDragging = true;
+        prevMouse = {x: e.clientX, y: e.clientY};
+        isAutoRotating = false;
+      });
+      window.addEventListener('pointerup', function() { isDragging = false; });
+      window.addEventListener('pointermove', function(e) {
+        if (isDragging) {
+          camTheta -= (e.clientX - prevMouse.x) * 0.005;
+          camPhi = Math.max(0.3, Math.min(2.8, camPhi + (e.clientY - prevMouse.y) * 0.005));
+          prevMouse = {x: e.clientX, y: e.clientY};
+          updateCamera();
+        }
+        var rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        var hits = raycaster.intersectObjects(markerMeshes);
+        renderer.domElement.style.cursor = hits.length > 0 ? 'pointer' : (isDragging ? 'grabbing' : 'grab');
+      });
+      canvas.addEventListener('wheel', function(e) {
+        e.preventDefault();
+        camDist = Math.max(7, Math.min(25, camDist + e.deltaY * 0.01));
+        updateCamera();
+        isAutoRotating = false;
+      }, {passive: false});
+      canvas.addEventListener('click', function(e) {
+        var rect = renderer.domElement.getBoundingClientRect();
+        mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        var hits = raycaster.intersectObjects(markerMeshes);
+        if (hits.length > 0) selectEvent(hits[0].object.userData.event);
+      });
+
+      var overlay = document.getElementById('loadingOverlay');
+      overlay.classList.add('hidden');
+      setTimeout(function(){ overlay.style.display = 'none'; }, 600);
+      animate(0);
+    }
+
+    // ====== RESIZE ======
+    function handleResize() {
+      if (!renderer) return;
+      var c = document.getElementById('globeContainer');
+      if (!c || c.clientWidth === 0 || c.clientHeight === 0) return;
+      camera.aspect = c.clientWidth / c.clientHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(c.clientWidth, c.clientHeight);
+    }
+    window.addEventListener('resize', handleResize);
+
+    // ====== TIMELINE ======
+    document.querySelectorAll('.timeline-day').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.timeline-day').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        activeFilter = btn.dataset.date;
+        buildMarkers();
+        buildArcs();
+        updateCounts();
+      });
+    });
+    function updateCounts() {
+      var v = EVENTS.filter(vis);
+      document.getElementById('statStrikes').textContent = v.length;
+    }
+
+    // ====== CLOCK ======
+    setInterval(function() {
+      var n = new Date();
+      document.getElementById('headerTime').textContent =
+        String(n.getUTCHours()).padStart(2,'0') + ':' +
+        String(n.getUTCMinutes()).padStart(2,'0') + ':' +
+        String(n.getUTCSeconds()).padStart(2,'0') + ' UTC';
+    }, 1000);
+
+    // ====== STRIKE LIST PANEL ======
+    var strikePanel = document.getElementById('strikeListPanel');
+    var strikeBtn = document.getElementById('strikeMenuBtn');
+    var strikeClose = document.getElementById('strikeListClose');
+    var strikeBody = document.getElementById('strikeListBody');
+    var strikeCountEl = document.getElementById('strikeListCount');
+    var strikeCatFilter = 'all';
+
+    strikeBtn.addEventListener('click', function() {
+      strikePanel.classList.toggle('open');
+      if (strikePanel.classList.contains('open')) renderStrikeList();
+    });
+    strikeClose.addEventListener('click', function() {
+      strikePanel.classList.remove('open');
+    });
+
+    document.querySelectorAll('.strike-filter').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        document.querySelectorAll('.strike-filter').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        strikeCatFilter = btn.dataset.cat;
+        renderStrikeList();
+      });
+    });
+
+    var CATS = {
+      'us-israel': 'US/ISRAELI STRIKE',
+      'iran': 'IRANIAN RETALIATION',
+      'lebanon-strike': 'STRIKE ON LEBANON',
+      'hezbollah': 'HEZBOLLAH STRIKE',
+      'other': 'OTHER EVENT'
+    };
+    var DATE_LABELS = {'feb28': 'FEB 28', 'mar1': 'MAR 1', 'mar2': 'MAR 2'};
+
+    function renderStrikeList() {
+      var filtered = EVENTS.filter(function(e) {
+        var dateOk = activeFilter === 'all' || e.date === activeFilter;
+        var catOk = strikeCatFilter === 'all' || e.category === strikeCatFilter;
+        return dateOk && catOk;
+      });
+      strikeCountEl.textContent = filtered.length;
+      var html = '';
+      filtered.forEach(function(evt) {
+        html += '<div class="strike-item" data-eid="' + evt.id + '">';
+        html += '<div class="strike-dot" style="background:' + evt.hex + ';box-shadow:0 0 6px ' + evt.hex + '50;"></div>';
+        html += '<div><div class="strike-name">' + evt.name + '</div>';
+        html += '<div class="strike-desc">' + evt.desc + '</div></div>';
+        html += '<div class="strike-date-tag">' + (DATE_LABELS[evt.date] || evt.dates) + '</div>';
+        html += '</div>';
+      });
+      if (filtered.length === 0) {
+        html = '<div style="padding:20px 14px;text-align:center;font-size:11px;color:var(--color-text-dim);">No events match current filters</div>';
+      }
+      strikeBody.innerHTML = html;
+
+      // Bind click to zoom/select
+      strikeBody.querySelectorAll('.strike-item').forEach(function(item) {
+        item.addEventListener('click', function() {
+          var eid = parseInt(item.dataset.eid);
+          var evt = EVENTS.find(function(e) { return e.id === eid; });
+          if (evt) {
+            selectEvent(evt);
+            // Rotate globe to event
+            var target = ll2v(evt.lat, evt.lon, camDist);
+            camTheta = Math.atan2(target.x, target.z);
+            camPhi = Math.acos(target.y / camDist);
+            isAutoRotating = false;
+            updateCamera();
+          }
+        });
+      });
+    }
+
+    // Re-render strike list when timeline filter changes
+    var origUpdateCounts = updateCounts;
+    updateCounts = function() {
+      origUpdateCounts();
+      if (strikePanel.classList.contains('open')) renderStrikeList();
+    };
+
+    // ====== LOAD DATA ======
+    document.getElementById('loadingText').textContent = 'Loading Map Data';
+    fetch('./countries-50m.json')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        document.getElementById('loadingText').textContent = 'Building Globe';
+        setTimeout(function() { init(data); }, 50);
+      })
+      .catch(function(err) {
+        console.error('Failed to load map data:', err);
+        document.getElementById('loadingText').textContent = 'Error: ' + err.message;
+      });
+
+  })();
+  </script>
+</body>
+</html>
