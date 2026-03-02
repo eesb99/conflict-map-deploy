@@ -30,10 +30,11 @@ const COL = {
   ACTOR2_NAME:    16,
   ACTOR2_COUNTRY: 17,
   EVENT_CODE:     26,
-  QUAD_CLASS:     28,   // 3=Verbal Conflict, 4=Material Conflict
-  GOLDSTEIN:      29,   // -10 to +10
-  NUM_MENTIONS:   30,
-  AVG_TONE:       33,
+  EVENT_ROOT_CODE: 28,
+  QUAD_CLASS:     29,   // 1=Verbal Coop, 2=Material Coop, 3=Verbal Conflict, 4=Material Conflict
+  GOLDSTEIN:      30,   // -10 to +10
+  NUM_MENTIONS:   31,
+  AVG_TONE:       34,
   ACTION_GEO_FULLNAME: 52,
   ACTION_GEO_COUNTRY:  53,
   ACTION_GEO_LAT:      56,
@@ -162,8 +163,7 @@ serve(async (req: Request) => {
     const meConflictRows = rows.filter((cols) => {
       const geoCountry = cols[COL.ACTION_GEO_COUNTRY] || "";
       const quadClass = parseInt(cols[COL.QUAD_CLASS]) || 0;
-      const eventCode = cols[COL.EVENT_CODE] || "";
-      const rootCode = eventCode.slice(0, 2);
+      const rootCode = cols[COL.EVENT_ROOT_CODE] || "";
       const lat = parseFloat(cols[COL.ACTION_GEO_LAT]);
       const lon = parseFloat(cols[COL.ACTION_GEO_LONG]);
 
