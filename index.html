@@ -8,6 +8,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     /* ====== OSINT DASHBOARD LAYOUT ====== */
     .main-content {
@@ -719,6 +720,9 @@
       .header-title { font-size: 9px; }
       .timeline-bar { padding: 6px 12px; gap: 6px; }
     }
+
+    @keyframes panel-flash { 0%,100%{background:var(--color-bg-card)} 50%{background:rgba(6,182,212,0.15)} }
+    .strike-list-header.flash { animation: panel-flash 0.5s ease 2; }
   </style>
 </head>
 <body>
@@ -729,7 +733,14 @@
         <div class="live-indicator"><div class="live-dot"></div><span>LIVE</span></div>
         <div class="header-title"><span>OSINT INTELLIGENCE DASHBOARD</span> &nbsp;|&nbsp; MIDDLE EAST COP &nbsp;|&nbsp; FEB 28 – MAR 2, 2026</div>
       </div>
-      <div class="header-right"><div class="header-time" id="headerTime">--:--:-- UTC</div></div>
+      <div class="header-right">
+        <div class="connection-status" id="connectionStatus" data-status="offline">
+          <div class="status-dot"></div>
+          <span class="status-text">OFFLINE</span>
+        </div>
+        <div class="last-updated" id="lastUpdated"></div>
+        <div class="header-time" id="headerTime">--:--:-- UTC</div>
+      </div>
     </header>
 
     <!-- MOBILE TABS -->
@@ -1018,10 +1029,11 @@
     <div class="timeline-bar">
       <span class="timeline-label">Timeline</span>
       <div class="timeline-days">
-        <button class="timeline-day active" data-date="all"><div class="timeline-day-name">ALL</div><div class="timeline-day-date">96 Hours</div></button>
-        <button class="timeline-day" data-date="feb28"><div class="timeline-day-name">DAY 1</div><div class="timeline-day-date">Feb 28</div></button>
-        <button class="timeline-day" data-date="mar1"><div class="timeline-day-name">DAY 2</div><div class="timeline-day-date">Mar 1</div></button>
-        <button class="timeline-day" data-date="mar2"><div class="timeline-day-name">DAY 3</div><div class="timeline-day-date">Mar 2</div></button>
+        <button class="timeline-day" data-date="live"><div class="timeline-day-name">LIVE</div><div class="timeline-day-date">Latest</div></button>
+        <button class="timeline-day" data-date="24h"><div class="timeline-day-name">24H</div><div class="timeline-day-date">24 Hours</div></button>
+        <button class="timeline-day" data-date="3d"><div class="timeline-day-name">3 DAYS</div><div class="timeline-day-date">72 Hours</div></button>
+        <button class="timeline-day" data-date="7d"><div class="timeline-day-name">7 DAYS</div><div class="timeline-day-date">1 Week</div></button>
+        <button class="timeline-day active" data-date="all"><div class="timeline-day-name">ALL</div><div class="timeline-day-date">All Events</div></button>
       </div>
     </div>
   </div>
@@ -1410,6 +1422,14 @@
       {id:50,lat:24.90,lon:46.40,name:"Saudi Aramco Refinery",desc:"Saudi Aramco refinery hit amid Iranian retaliatory strikes across Gulf region.",category:"iran",date:"mar2",color:0x06b6d4,hex:"#06b6d4",dates:"Mar 2"}
     ];
 
+    // Shared date/time utilities for rolling window filter
+    var KNOWN_DATES = {feb28:'2026-02-28', mar1:'2026-03-01', mar2:'2026-03-02'};
+    var FILTER_WINDOWS = { 'live': 15*60*1000, '24h': 24*3600*1000, '3d': 3*86400000, '7d': 7*86400000 };
+    function dateToEpoch(dateKey) {
+      return new Date(KNOWN_DATES[dateKey] || dateKey).getTime() || 0;
+    }
+    EVENTS.forEach(function(e) { e._ts = dateToEpoch(e.date); });
+
     // ====== ARC DATA (23 arcs) ======
     var ARCS = [
       {from:[31,34.8],to:[35.6892,51.389],color:0xef4444,date:"feb28"},
@@ -1444,6 +1464,8 @@
       {from:[31,34.8],to:[26.00,57.00],color:0xef4444,date:"mar2"}
     ];
 
+    ARCS.forEach(function(a) { a._ts = dateToEpoch(a.date); });
+
     // ====== AIRPORT LOCATIONS for globe no-fly overlays ======
     var AIRPORTS = [
       {code:'DXB',lat:25.2532,lon:55.3657},{code:'AUH',lat:24.4330,lon:54.6511},
@@ -1470,6 +1492,20 @@
     var hormuzPulseGroup;
     var iranOverlayMesh;
 
+    // ====== REACTIVE STATE ======
+    var EventBus = new EventTarget();
+    var store = new Proxy({
+      activeFilter: 'all',
+      connectionStatus: 'disconnected',
+      lastUpdated: null
+    }, {
+      set: function(target, key, value) {
+        target[key] = value;
+        EventBus.dispatchEvent(new CustomEvent('state:' + key, { detail: value }));
+        return true;
+      }
+    });
+
     function ll2v(lat, lon, r) {
       var phi = (90 - lat) * Math.PI / 180;
       var theta = (lon + 180) * Math.PI / 180;
@@ -1480,7 +1516,10 @@
       );
     }
 
-    function vis(e) { return activeFilter === 'all' || e.date === activeFilter; }
+    function vis(e) {
+      if (activeFilter === 'all') return true;
+      return (Date.now() - (e._ts || 0)) <= (FILTER_WINDOWS[activeFilter] || Infinity);
+    }
 
     function initCamera() {
       var mePoint = ll2v(28, 48, camDist);
@@ -1604,10 +1643,22 @@
       scene.add(new THREE.Points(geo, new THREE.PointsMaterial({color: 0x4a6660, size: 0.15, sizeAttenuation: true})));
     }
 
+    function clearGroup(group) {
+      while (group.children.length) {
+        var child = group.children[0];
+        if (child.geometry) child.geometry.dispose();
+        if (child.material) {
+          if (Array.isArray(child.material)) child.material.forEach(function(m) { m.dispose(); });
+          else child.material.dispose();
+        }
+        group.remove(child);
+      }
+    }
+
     function buildMarkers() {
       markerMeshes = [];
-      while (markerGroup.children.length) markerGroup.remove(markerGroup.children[0]);
-      while (glowGroup.children.length) glowGroup.remove(glowGroup.children[0]);
+      clearGroup(markerGroup);
+      clearGroup(glowGroup);
       EVENTS.forEach(function(evt) {
         if (!vis(evt)) return;
         var p = ll2v(evt.lat, evt.lon, R + 0.02);
@@ -1642,9 +1693,9 @@
 
     function buildArcs() {
       arcDots = [];
-      while (arcGroup.children.length) arcGroup.remove(arcGroup.children[0]);
+      clearGroup(arcGroup);
       ARCS.forEach(function(arc) {
-        if (activeFilter !== 'all' && arc.date !== activeFilter) return;
+        if (!vis(arc)) return;
         var start = ll2v(arc.from[0], arc.from[1], R + 0.025);
         var end = ll2v(arc.to[0], arc.to[1], R + 0.025);
         var mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
@@ -1729,7 +1780,7 @@
       tooltip.id = 'eventTooltip';
       tooltip.style.cssText = 'position:absolute;top:12px;left:12px;max-width:300px;background:rgba(8,22,26,0.95);border:1px solid rgba(120,160,155,0.15);border-radius:6px;padding:12px;z-index:50;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);';
       var cats = {'us-israel':'US/Israeli Strike','iran':'Iranian Retaliation','lebanon-strike':'Israeli Strike on Lebanon','hezbollah':'Hezbollah Strike','other':'Other Event'};
-      tooltip.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:'+evt.hex+';box-shadow:0 0 8px '+evt.hex+'40;flex-shrink:0;"></div><div><div style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--color-white);">'+evt.name+'</div><div style="font-family:var(--font-mono);font-size:9px;color:'+evt.hex+';margin-top:1px;">'+cats[evt.category]+'</div></div><button onclick="this.parentElement.parentElement.remove()" style="margin-left:auto;background:none;border:none;color:var(--color-text-dim);cursor:pointer;font-size:14px;padding:4px;">&times;</button></div><div style="font-size:11px;color:var(--color-text-muted);line-height:1.5;margin-bottom:6px;">'+evt.desc+'</div><div style="font-family:var(--font-mono);font-size:9px;color:var(--color-text-dim);">'+evt.dates+' &nbsp;|&nbsp; '+evt.lat.toFixed(4)+'°N, '+evt.lon.toFixed(4)+'°E</div>';
+      tooltip.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:'+escHtml(evt.hex)+';box-shadow:0 0 8px '+escHtml(evt.hex)+'40;flex-shrink:0;"></div><div><div style="font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--color-white);">'+escHtml(evt.name)+'</div><div style="font-family:var(--font-mono);font-size:9px;color:'+escHtml(evt.hex)+';margin-top:1px;">'+escHtml(cats[evt.category] || '')+'</div></div><button onclick="this.parentElement.parentElement.remove()" style="margin-left:auto;background:none;border:none;color:var(--color-text-dim);cursor:pointer;font-size:14px;padding:4px;">&times;</button></div><div style="font-size:11px;color:var(--color-text-muted);line-height:1.5;margin-bottom:6px;">'+escHtml(evt.desc)+'</div><div style="font-family:var(--font-mono);font-size:9px;color:var(--color-text-dim);">'+escHtml(evt.dates)+' &nbsp;|&nbsp; '+evt.lat.toFixed(4)+'°N, '+evt.lon.toFixed(4)+'°E</div>';
       document.getElementById('globeContainer').appendChild(tooltip);
     }
 
@@ -1864,6 +1915,7 @@
       overlay.classList.add('hidden');
       setTimeout(function(){ overlay.style.display = 'none'; }, 600);
       animate(0);
+      connectRealtime();
     }
 
     // ====== RESIZE ======
@@ -1882,10 +1934,7 @@
       btn.addEventListener('click', function() {
         document.querySelectorAll('.timeline-day').forEach(function(b) { b.classList.remove('active'); });
         btn.classList.add('active');
-        activeFilter = btn.dataset.date;
-        buildMarkers();
-        buildArcs();
-        updateCounts();
+        store.activeFilter = btn.dataset.date;
       });
     });
     function updateCounts() {
@@ -1893,13 +1942,83 @@
       document.getElementById('statStrikes').textContent = v.length;
     }
 
+    // Reactive rebuild on filter change
+    EventBus.addEventListener('state:activeFilter', function() {
+      activeFilter = store.activeFilter;
+      buildMarkers();
+      buildArcs();
+      updateCounts();
+      renderStrikeList();
+    });
+
+    // Connection status UI subscribers
+    EventBus.addEventListener('state:connectionStatus', function(e) {
+      var el = document.getElementById('connectionStatus');
+      el.dataset.status = e.detail;
+      el.querySelector('.status-text').textContent = e.detail.toUpperCase();
+    });
+    function fmtUTC(d) {
+      return String(d.getUTCHours()).padStart(2,'0') + ':' +
+        String(d.getUTCMinutes()).padStart(2,'0') + ':' +
+        String(d.getUTCSeconds()).padStart(2,'0') + ' UTC';
+    }
+    EventBus.addEventListener('state:lastUpdated', function(e) {
+      if (!e.detail) return;
+      document.getElementById('lastUpdated').textContent = 'Updated ' + fmtUTC(e.detail);
+    });
+
+    // ====== SUPABASE CONFIG ======
+    var SUPABASE_URL = 'https://qdfmacfwzwzjzcfjwiaa.supabase.co';
+    var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkZm1hY2Z3end6anpjZmp3aWFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYyMDIxNTgsImV4cCI6MjA4MTc3ODE1OH0.DgGAsSqEx-gFz68fApijRuvGgr0wGdDJorm-4L0QNdA';
+
+    // ====== REAL-TIME CONNECTION ======
+    function connectRealtime() {
+      if (!window.supabase || !SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        store.connectionStatus = 'offline';
+        return;
+      }
+      var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+      store.connectionStatus = 'connecting';
+
+      sb.channel('osint-events')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'osint_events'
+        }, function(payload) {
+          var row = payload.new;
+          var evt = {
+            id: row.id || (EVENTS.length + 1),
+            lat: parseFloat(row.lat),
+            lon: parseFloat(row.lon),
+            name: row.name,
+            desc: row.description || '',
+            category: row.category,
+            date: row.event_date,
+            color: parseInt((row.color || '').replace('#', ''), 16) || 0x06b6d4,
+            hex: row.color || '#06b6d4',
+            dates: row.event_date,
+            _ts: new Date(row.event_date).getTime() || Date.now()
+          };
+          EVENTS.push(evt);
+          store.lastUpdated = new Date();
+          buildMarkers();
+          updateCounts();
+          renderStrikeList();
+          // Flash strike list header on new event
+          var hdr = document.querySelector('.strike-list-header');
+          if (hdr) { hdr.classList.add('flash'); setTimeout(function() { hdr.classList.remove('flash'); }, 1000); }
+        })
+        .subscribe(function(status) {
+          if (status === 'SUBSCRIBED') store.connectionStatus = 'connected';
+          else if (status === 'CLOSED') store.connectionStatus = 'disconnected';
+          else store.connectionStatus = 'reconnecting';
+        });
+    }
+
     // ====== CLOCK ======
     setInterval(function() {
-      var n = new Date();
-      document.getElementById('headerTime').textContent =
-        String(n.getUTCHours()).padStart(2,'0') + ':' +
-        String(n.getUTCMinutes()).padStart(2,'0') + ':' +
-        String(n.getUTCSeconds()).padStart(2,'0') + ' UTC';
+      document.getElementById('headerTime').textContent = fmtUTC(new Date());
     }, 1000);
 
     // ====== STRIKE LIST PANEL ======
@@ -1927,29 +2046,50 @@
       });
     });
 
-    var CATS = {
-      'us-israel': 'US/ISRAELI STRIKE',
-      'iran': 'IRANIAN RETALIATION',
-      'lebanon-strike': 'STRIKE ON LEBANON',
-      'hezbollah': 'HEZBOLLAH STRIKE',
-      'other': 'OTHER EVENT'
-    };
+    function escHtml(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // Event delegation for strike list clicks (registered once, not per-render)
+    strikeBody.addEventListener('click', function(e) {
+      var item = e.target.closest('.strike-item');
+      if (!item) return;
+      var eid = parseInt(item.dataset.eid);
+      var evt = EVENTS.find(function(ev) { return ev.id === eid; });
+      if (evt) {
+        selectEvent(evt);
+        var target = ll2v(evt.lat, evt.lon, camDist);
+        camTheta = Math.atan2(target.x, target.z);
+        camPhi = Math.acos(target.y / camDist);
+        isAutoRotating = false;
+        updateCamera();
+      }
+    });
     var DATE_LABELS = {'feb28': 'FEB 28', 'mar1': 'MAR 1', 'mar2': 'MAR 2'};
 
+    var strikeFilterBtns = document.querySelectorAll('.strike-filter');
+
     function renderStrikeList() {
-      var filtered = EVENTS.filter(function(e) {
-        var dateOk = activeFilter === 'all' || e.date === activeFilter;
-        var catOk = strikeCatFilter === 'all' || e.category === strikeCatFilter;
-        return dateOk && catOk;
+      // Single pass: compute visibility, category counts, and filtered list together
+      var filtered = [];
+      var visCounts = {};
+      var visTotal = 0;
+      EVENTS.forEach(function(e) {
+        if (!vis(e)) return;
+        visTotal++;
+        visCounts[e.category] = (visCounts[e.category] || 0) + 1;
+        if (strikeCatFilter === 'all' || e.category === strikeCatFilter) {
+          filtered.push(e);
+        }
       });
       strikeCountEl.textContent = filtered.length;
       var html = '';
       filtered.forEach(function(evt) {
         html += '<div class="strike-item" data-eid="' + evt.id + '">';
-        html += '<div class="strike-dot" style="background:' + evt.hex + ';box-shadow:0 0 6px ' + evt.hex + '50;"></div>';
-        html += '<div><div class="strike-name">' + evt.name + '</div>';
-        html += '<div class="strike-desc">' + evt.desc + '</div></div>';
-        html += '<div class="strike-date-tag">' + (DATE_LABELS[evt.date] || evt.dates) + '</div>';
+        html += '<div class="strike-dot" style="background:' + escHtml(evt.hex) + ';box-shadow:0 0 6px ' + escHtml(evt.hex) + '50;"></div>';
+        html += '<div><div class="strike-name">' + escHtml(evt.name) + '</div>';
+        html += '<div class="strike-desc">' + escHtml(evt.desc) + '</div></div>';
+        html += '<div class="strike-date-tag">' + escHtml(DATE_LABELS[evt.date] || evt.dates) + '</div>';
         html += '</div>';
       });
       if (filtered.length === 0) {
@@ -1957,30 +2097,15 @@
       }
       strikeBody.innerHTML = html;
 
-      // Bind click to zoom/select
-      strikeBody.querySelectorAll('.strike-item').forEach(function(item) {
-        item.addEventListener('click', function() {
-          var eid = parseInt(item.dataset.eid);
-          var evt = EVENTS.find(function(e) { return e.id === eid; });
-          if (evt) {
-            selectEvent(evt);
-            // Rotate globe to event
-            var target = ll2v(evt.lat, evt.lon, camDist);
-            camTheta = Math.atan2(target.x, target.z);
-            camPhi = Math.acos(target.y / camDist);
-            isAutoRotating = false;
-            updateCamera();
-          }
-        });
+      // Update per-category counts on cached filter buttons
+      strikeFilterBtns.forEach(function(btn) {
+        var cat = btn.dataset.cat;
+        var base = btn.dataset.label || btn.textContent.replace(/\s*\d+$/, '');
+        btn.dataset.label = base;
+        var count = cat === 'all' ? visTotal : (visCounts[cat] || 0);
+        btn.textContent = base + ' ' + count;
       });
     }
-
-    // Re-render strike list when timeline filter changes
-    var origUpdateCounts = updateCounts;
-    updateCounts = function() {
-      origUpdateCounts();
-      if (strikePanel.classList.contains('open')) renderStrikeList();
-    };
 
     // ====== LOAD DATA ======
     document.getElementById('loadingText').textContent = 'Loading Map Data';

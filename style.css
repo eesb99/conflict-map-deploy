@@ -250,6 +250,46 @@ html, body {
   50% { opacity: 1; }
 }
 
+/* ====== CONNECTION STATUS ====== */
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.connection-status .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-text-dim);
+}
+.connection-status[data-status="connected"] .status-dot {
+  background: var(--color-green);
+  box-shadow: 0 0 6px var(--color-green-glow);
+}
+.connection-status[data-status="connected"] .status-text { color: var(--color-green); }
+.connection-status[data-status="connecting"] .status-dot,
+.connection-status[data-status="reconnecting"] .status-dot {
+  background: var(--color-amber);
+  animation: pulse-live 1.5s ease-in-out infinite;
+}
+.connection-status[data-status="connecting"] .status-text,
+.connection-status[data-status="reconnecting"] .status-text { color: var(--color-amber); }
+.connection-status[data-status="disconnected"] .status-dot,
+.connection-status[data-status="offline"] .status-dot { background: var(--color-text-dim); }
+.connection-status[data-status="disconnected"] .status-text,
+.connection-status[data-status="offline"] .status-text { color: var(--color-text-dim); }
+
+.last-updated {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--color-text-dim);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
