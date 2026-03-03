@@ -106,6 +106,93 @@ function buildEventName(row: string[]): string {
   return `${actor1} ${verb} ${actor2} near ${geo}`.slice(0, 200);
 }
 
+// ====== LLM SEMANTIC DEDUP ======
+
+interface LLMCluster {
+  name: string;
+  description: string;
+  lat: number;
+  lon: number;
+  total_mentions: number;
+  cluster_indices: number[];
+}
+
+async function deduplicateWithLLM(rows: string[][]): Promise<LLMCluster[] | null> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) {
+    console.log("LLM dedup: ANTHROPIC_API_KEY not set, skipping");
+    return null;
+  }
+
+  // Build compact event summaries for the LLM
+  const events = rows.map((row, i) => ({
+    i,
+    actor1: row[COL.ACTOR1_NAME] || "",
+    actor2: row[COL.ACTOR2_NAME] || "",
+    code: row[COL.EVENT_CODE] || "",
+    location: row[COL.ACTION_GEO_FULLNAME] || "",
+    lat: parseFloat(row[COL.ACTION_GEO_LAT]),
+    lon: parseFloat(row[COL.ACTION_GEO_LONG]),
+    mentions: parseInt(row[COL.NUM_MENTIONS]) || 0,
+    goldstein: parseFloat(row[COL.GOLDSTEIN]) || 0,
+  }));
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1024,
+      system: `You are a conflict event deduplication engine for GDELT Middle East monitoring.
+Given an array of candidate events, cluster those describing the same real-world incident and return one entry per cluster.
+
+Rules:
+- Events with similar coordinates (<50km apart) and overlapping actors = same incident
+- Normalize actor names: IRANIAN/IRAN/TEHERAN -> Iran, ISRAELI/ISRAEL -> Israel, etc.
+- Write concise journalist-style "name" (max 80 chars)
+- Write 1-sentence "description" with weapon type, target, context if inferrable
+- Pick the most specific lat/lon from the cluster (avoid round numbers)
+- Sum mentions across cluster members into "total_mentions"
+
+Return ONLY a JSON array (no markdown, no explanation):
+[{"name":"...","description":"...","lat":0,"lon":0,"total_mentions":0,"cluster_indices":[0,3]}]`,
+      messages: [{ role: "user", content: JSON.stringify(events) }],
+    }),
+  });
+
+  if (!res.ok) {
+    console.error(`LLM dedup: Anthropic API returned ${res.status}`);
+    return null;
+  }
+
+  const body = await res.json();
+  const text = body.content?.[0]?.text || "";
+
+  // Parse JSON, stripping any accidental markdown fencing
+  const jsonStr = text.replace(/^```json?\n?/, "").replace(/\n?```$/, "").trim();
+  const clusters: LLMCluster[] = JSON.parse(jsonStr);
+
+  // Validate output
+  const maxIdx = rows.length - 1;
+  for (const c of clusters) {
+    if (
+      !Array.isArray(c.cluster_indices) ||
+      c.cluster_indices.some((i) => i < 0 || i > maxIdx) ||
+      !c.name || !c.description ||
+      typeof c.lat !== "number" || typeof c.lon !== "number"
+    ) {
+      console.error("LLM dedup: invalid cluster in response, falling back");
+      return null;
+    }
+  }
+
+  return clusters;
+}
+
 // ====== MAIN HANDLER ======
 
 serve(async (req: Request) => {
@@ -261,6 +348,17 @@ serve(async (req: Request) => {
       );
     }
 
+    // 4c. LLM semantic dedup + enrichment
+    let llmClusters: LLMCluster[] | null = null;
+    try {
+      llmClusters = await deduplicateWithLLM(meConflictRows);
+      if (llmClusters) {
+        console.log(`LLM dedup: ${meConflictRows.length} events -> ${llmClusters.length} clusters`);
+      }
+    } catch (err) {
+      console.error("LLM dedup failed, falling back to raw events:", (err as Error).message);
+    }
+
     // 5. Init Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -305,51 +403,108 @@ serve(async (req: Request) => {
     const newEvents = [];
     let skippedDedup = 0;
 
-    for (const row of meConflictRows) {
-      const url = row[COL.SOURCE_URL] || "";
-      const globalId = row[COL.GLOBAL_EVENT_ID] || "";
-      if ((url && existingUrls.has(url)) || (globalId && existingEventIds.has(globalId))) {
-        skippedDedup++;
-        continue;
+    if (llmClusters) {
+      // -- LLM-enriched path: build from semantic clusters --
+      for (const cluster of llmClusters) {
+        const memberRows = cluster.cluster_indices.map((i) => meConflictRows[i]);
+
+        // Skip cluster if any member already exists in DB
+        const alreadyExists = memberRows.some((row) => {
+          const url = row[COL.SOURCE_URL] || "";
+          const globalId = row[COL.GLOBAL_EVENT_ID] || "";
+          return (url && existingUrls.has(url)) || (globalId && existingEventIds.has(globalId));
+        });
+        if (alreadyExists) {
+          skippedDedup++;
+          continue;
+        }
+
+        const primaryRow = memberRows[0];
+        const { category, color } = classify(primaryRow);
+        const d = primaryRow[COL.SQLDATE] || "";
+        const eventDate = d.length >= 8
+          ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+          : new Date().toISOString().slice(0, 10);
+
+        // Higher confidence for multi-source clusters
+        const confidence = Math.min(0.95,
+          0.4 + (memberRows.length * 0.05) + (Math.min(cluster.total_mentions, 20) / 40));
+
+        // Best source URL from highest-mentions member
+        const bestRow = memberRows.reduce((a, b) =>
+          (parseInt(b[COL.NUM_MENTIONS]) || 0) > (parseInt(a[COL.NUM_MENTIONS]) || 0) ? b : a
+        );
+
+        newEvents.push({
+          lat: cluster.lat,
+          lon: cluster.lon,
+          name: cluster.name,
+          description: cluster.description,
+          category,
+          event_date: eventDate,
+          source: "gdelt+llm",
+          source_url: bestRow[COL.SOURCE_URL] || null,
+          confidence: Math.round(confidence * 100) / 100,
+          color,
+          is_verified: false,
+          raw_response: {
+            cluster: cluster.cluster_indices.map((i) => ({
+              global_event_id: meConflictRows[i][COL.GLOBAL_EVENT_ID],
+              event_code: meConflictRows[i][COL.EVENT_CODE],
+              actor1: meConflictRows[i][COL.ACTOR1_NAME],
+              actor2: meConflictRows[i][COL.ACTOR2_NAME],
+            })),
+            llm_name: cluster.name,
+            total_mentions: cluster.total_mentions,
+          },
+        });
       }
+    } else {
+      // -- Raw fallback path (no LLM) --
+      for (const row of meConflictRows) {
+        const url = row[COL.SOURCE_URL] || "";
+        const globalId = row[COL.GLOBAL_EVENT_ID] || "";
+        if ((url && existingUrls.has(url)) || (globalId && existingEventIds.has(globalId))) {
+          skippedDedup++;
+          continue;
+        }
 
-      const lat = parseFloat(row[COL.ACTION_GEO_LAT]);
-      const lon = parseFloat(row[COL.ACTION_GEO_LONG]);
-      const { category, color } = classify(row);
+        const lat = parseFloat(row[COL.ACTION_GEO_LAT]);
+        const lon = parseFloat(row[COL.ACTION_GEO_LONG]);
+        const { category, color } = classify(row);
 
-      // Parse SQLDATE: "20260302" -> "2026-03-02"
-      const d = row[COL.SQLDATE] || "";
-      const eventDate = d.length >= 8
-        ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
-        : new Date().toISOString().slice(0, 10);
+        const d = row[COL.SQLDATE] || "";
+        const eventDate = d.length >= 8
+          ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+          : new Date().toISOString().slice(0, 10);
 
-      // Confidence from Goldstein scale magnitude and mention count
-      const goldstein = Math.abs(parseFloat(row[COL.GOLDSTEIN]) || 0);
-      const mentions = parseInt(row[COL.NUM_MENTIONS]) || 1;
-      const confidence = Math.min(0.95, 0.3 + (goldstein / 20) + (Math.min(mentions, 10) / 20));
+        const goldstein = Math.abs(parseFloat(row[COL.GOLDSTEIN]) || 0);
+        const mentions = parseInt(row[COL.NUM_MENTIONS]) || 1;
+        const confidence = Math.min(0.95, 0.3 + (goldstein / 20) + (Math.min(mentions, 10) / 20));
 
-      newEvents.push({
-        lat,
-        lon,
-        name: buildEventName(row),
-        description: `CAMEO ${row[COL.EVENT_CODE]} | ${row[COL.ACTION_GEO_FULLNAME]} | Goldstein: ${row[COL.GOLDSTEIN]} | Mentions: ${row[COL.NUM_MENTIONS]}`,
-        category,
-        event_date: eventDate,
-        source: "gdelt",
-        source_url: url || null,
-        confidence: Math.round(confidence * 100) / 100,
-        color,
-        is_verified: false,
-        raw_response: {
-          global_event_id: row[COL.GLOBAL_EVENT_ID],
-          event_code: row[COL.EVENT_CODE],
-          quad_class: row[COL.QUAD_CLASS],
-          goldstein: row[COL.GOLDSTEIN],
-          avg_tone: row[COL.AVG_TONE],
-          actor1: row[COL.ACTOR1_NAME],
-          actor2: row[COL.ACTOR2_NAME],
-        },
-      });
+        newEvents.push({
+          lat,
+          lon,
+          name: buildEventName(row),
+          description: `CAMEO ${row[COL.EVENT_CODE]} | ${row[COL.ACTION_GEO_FULLNAME]} | Goldstein: ${row[COL.GOLDSTEIN]} | Mentions: ${row[COL.NUM_MENTIONS]}`,
+          category,
+          event_date: eventDate,
+          source: "gdelt",
+          source_url: url || null,
+          confidence: Math.round(confidence * 100) / 100,
+          color,
+          is_verified: false,
+          raw_response: {
+            global_event_id: row[COL.GLOBAL_EVENT_ID],
+            event_code: row[COL.EVENT_CODE],
+            quad_class: row[COL.QUAD_CLASS],
+            goldstein: row[COL.GOLDSTEIN],
+            avg_tone: row[COL.AVG_TONE],
+            actor1: row[COL.ACTOR1_NAME],
+            actor2: row[COL.ACTOR2_NAME],
+          },
+        });
+      }
     }
 
     // 8. Batch insert (Supabase max ~1000 per insert)
@@ -367,6 +522,7 @@ serve(async (req: Request) => {
     const result = {
       fetched: rows.length,
       filtered: meConflictRows.length,
+      llm_clusters: llmClusters?.length ?? null,
       inserted: insertedCount,
       skipped_dedup: skippedDedup,
     };
