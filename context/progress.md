@@ -9,6 +9,7 @@
 | Phase 3: Mac Mini Polling | Complete | 2026-03-03 | 100% |
 | Phase 4: GDELT Bug Fix + Filters | Complete | 2026-03-03 | 100% |
 | Phase 5: Startup Fetch | Complete | 2026-03-03 | 100% |
+| Phase 6: Filter Tightening + Cleanup | Complete | 2026-03-03 | 100% |
 
 ## Phase 1: Static Dashboard (2026-03-02) - COMPLETE
 
@@ -82,11 +83,34 @@
 - Extracted shared `rowToEvent()` function for Realtime + startup fetch
 - Existing GDELT events now visible immediately, not just live inserts
 
+## Phase 6: Filter Tightening + DB Cleanup (2026-03-03) - COMPLETE
+
+**Duration:** ~1.5 hours
+**Status:** Complete -- edge function v3 deployed, DB cleaned to 208 events
+
+### Filter Changes (v1 -> v2 -> v3)
+- v2: MIN_MENTIONS 3->5, Goldstein<=-7, tone<-3, centroid skip, global_event_id dedup, 15/poll cap
+- v3: Fake actor blocklist (newspapers/cities/humanitarian), actor2 required, capital-default coord filter
+
+### DB Cleanup
+- 2,096 -> 535: Removed 1,561 events failing v2 signal filters (centroids, low mentions, neutral tone)
+- 535 -> 208: Removed 327 events with fake actors, unknown targets, Tehran-default coords
+
+### Validation
+- v2 deployment: 11:30 UTC poll dropped from ~33 to 6 events (confirmed)
+- v2 second poll: 11:45 UTC confirmed 7 events (consistent)
+- Remaining 208 events: all have real actor pairs, specific geolocations, high confidence
+
+### Key Findings
+- 58% of historical events were at centroid/capital-default coordinates (no real precision)
+- 6% had newspaper bylines parsed as actors (NEW YORK, WASHINGTON, LONDON)
+- 3% had humanitarian orgs as actors (RED CRESCENT, RED CROSS)
+
 ## Metrics
 
-- Total commits: 5
+- Total commits: 5 (+ 1 pending)
 - Total files: 19 tracked
-- Edge functions: 1 (poll-gdelt)
+- Edge functions: 1 (poll-gdelt v3)
 - External services: Supabase, GDELT, Vercel
 - Infrastructure: Mac Mini (launchd cron)
-- DB events: 137 (116 noisy + 21 clean -- pending cleanup)
+- DB events: 208 (high-quality, post-cleanup)

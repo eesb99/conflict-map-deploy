@@ -160,23 +160,75 @@ serve(async (req: Request) => {
 
     // 4. Filter for Middle East military strike events only
     const STRIKE_CAMEO_ROOTS = new Set(["18", "19", "20"]); // assault, fight, mass violence
-    const MIN_MENTIONS = 3; // filter out low-signal single-source events
+    const MIN_MENTIONS = 5; // require stronger multi-source corroboration (was 3)
+    const MAX_EVENTS_PER_POLL = 15; // cap to prioritize highest-signal events
+
+    // Country centroid coordinates (FIPS codes) -- events at these coords
+    // have no real location precision and clutter the globe
+    const COUNTRY_CENTROIDS: Record<string, [number, number]> = {
+      IR: [32.0, 53.0],
+      IS: [31.5, 34.75],
+      IZ: [33.0, 44.0],
+      SY: [35.0, 38.0],
+      YM: [15.5, 48.0],
+      LE: [33.83, 35.83],
+      JO: [31.0, 36.0],
+      SA: [25.0, 45.0],
+      GZ: [31.42, 34.35],
+      WE: [31.95, 35.25],
+    };
+
+    const isCentroid = (geoCountry: string, lat: number, lon: number): boolean => {
+      const c = COUNTRY_CENTROIDS[geoCountry];
+      if (!c) return false;
+      return Math.abs(lat - c[0]) < 0.5 && Math.abs(lon - c[1]) < 0.5;
+    };
+
+    // Fake actors: GDELT misparses newspaper bylines, city datelines,
+    // and humanitarian orgs as conflict participants
+    const FAKE_ACTORS = new Set([
+      "NEW YORK", "WASHINGTON", "LONDON", "PARIS", "MOSCOW", "BEIJING",
+      "EUROPE", "AFRICA", "ASIA", "AUSTRALIA", "CHINA", "CHINESE",
+      "RUSSIA", "RUSSIAN", "INDIA", "INDIAN", "BRAZIL", "MEXICO",
+      "SCHOOL", "HOSPITAL", "UNIVERSITY", "MEDIA", "PRESS",
+      "RED CRESCENT", "RED CROSS",
+    ]);
+
+    // Capital-city default coordinates GDELT falls back to (e.g. Tehran 35.75,51.51)
+    const CAPITAL_DEFAULTS: Array<[number, number]> = [
+      [35.75, 51.5148],   // Tehran
+      [24.6408, 46.7728], // Riyadh
+      [31.9522, 35.2332], // Amman
+    ];
+    const isCapitalDefault = (lat: number, lon: number): boolean =>
+      CAPITAL_DEFAULTS.some(([clat, clon]) => Math.abs(lat - clat) < 0.01 && Math.abs(lon - clon) < 0.01);
+
     const allMeConflict = rows.filter((cols) => {
       const geoCountry = cols[COL.ACTION_GEO_COUNTRY] || "";
       const quadClass = parseInt(cols[COL.QUAD_CLASS]) || 0;
       const rootCode = cols[COL.EVENT_ROOT_CODE] || "";
       const mentions = parseInt(cols[COL.NUM_MENTIONS]) || 0;
       const actor1 = (cols[COL.ACTOR1_NAME] || "").trim();
+      const actor2 = (cols[COL.ACTOR2_NAME] || "").trim();
       const lat = parseFloat(cols[COL.ACTION_GEO_LAT]);
       const lon = parseFloat(cols[COL.ACTION_GEO_LONG]);
+      const goldstein = parseFloat(cols[COL.GOLDSTEIN]) || 0;
+      const tone = parseFloat(cols[COL.AVG_TONE]) || 0;
 
       return (
         ME_COUNTRIES.has(geoCountry) &&
         quadClass === 4 &&                   // Material Conflict only
         STRIKE_CAMEO_ROOTS.has(rootCode) &&  // Military action codes
         mentions >= MIN_MENTIONS &&          // Multi-source corroboration
-        actor1.length > 0 &&                 // Require known actor
-        !isNaN(lat) && !isNaN(lon)
+        goldstein <= -7 &&                   // Severe negative events only (-10 to +10 scale)
+        tone < -3 &&                         // Negatively-reported events (not diplomatic/analytical)
+        actor1.length > 0 &&                 // Require known actor1
+        actor2.length > 0 &&                 // Require known actor2
+        !FAKE_ACTORS.has(actor1) &&          // Skip newspaper/city/humanitarian misparses
+        !FAKE_ACTORS.has(actor2) &&
+        !isNaN(lat) && !isNaN(lon) &&
+        !isCentroid(geoCountry, lat, lon) && // Skip low-precision centroid coordinates
+        !isCapitalDefault(lat, lon)          // Skip capital-city default fallback coords
       );
     });
 
@@ -194,9 +246,13 @@ serve(async (req: Request) => {
         dedupMap.set(key, cols);
       }
     }
-    const meConflictRows = Array.from(dedupMap.values());
+    // Sort by mentions desc and cap at MAX_EVENTS_PER_POLL
+    const meConflictSorted = Array.from(dedupMap.values()).sort((a, b) =>
+      (parseInt(b[COL.NUM_MENTIONS]) || 0) - (parseInt(a[COL.NUM_MENTIONS]) || 0)
+    );
+    const meConflictRows = meConflictSorted.slice(0, MAX_EVENTS_PER_POLL);
 
-    console.log(`Filtered to ${meConflictRows.length} ME conflict events (after dedup)`);
+    console.log(`Filtered to ${meConflictRows.length} ME conflict events (after dedup, capped at ${MAX_EVENTS_PER_POLL})`);
 
     if (meConflictRows.length === 0) {
       return new Response(
@@ -210,12 +266,15 @@ serve(async (req: Request) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // 6. Batch dedup check by source_url
+    // 6. Batch dedup check by source_url AND global_event_id
     const sourceUrls = meConflictRows
       .map((r) => r[COL.SOURCE_URL])
       .filter(Boolean);
+    const globalEventIds = meConflictRows
+      .map((r) => r[COL.GLOBAL_EVENT_ID])
+      .filter(Boolean);
 
-    // Check in batches of 100 (Supabase .in() limit)
+    // Check source_url dedup in batches of 100 (Supabase .in() limit)
     const existingUrls = new Set<string>();
     for (let i = 0; i < sourceUrls.length; i += 100) {
       const batch = sourceUrls.slice(i, i + 100);
@@ -228,13 +287,28 @@ serve(async (req: Request) => {
       }
     }
 
+    // Check global_event_id dedup via raw_response JSONB (->> extracts as text)
+    const existingEventIds = new Set<string>();
+    for (let i = 0; i < globalEventIds.length; i += 100) {
+      const batch = globalEventIds.slice(i, i + 100);
+      const { data } = await supabase
+        .from("osint_events")
+        .select("raw_response->>global_event_id")
+        .in("raw_response->>global_event_id", batch);
+      for (const r of data ?? []) {
+        const eid = (r as Record<string, unknown>)["global_event_id"];
+        if (eid) existingEventIds.add(String(eid));
+      }
+    }
+
     // 7. Build event objects
     const newEvents = [];
     let skippedDedup = 0;
 
     for (const row of meConflictRows) {
       const url = row[COL.SOURCE_URL] || "";
-      if (url && existingUrls.has(url)) {
+      const globalId = row[COL.GLOBAL_EVENT_ID] || "";
+      if ((url && existingUrls.has(url)) || (globalId && existingEventIds.has(globalId))) {
         skippedDedup++;
         continue;
       }
